@@ -23,7 +23,7 @@ const batchPos = ref({ left: '0px', top: '0px' })
 
 const visibleNotes = computed(() => {
   const active = notebooks.activeId
-  const list = notes.byUpdatedAt
+  const list = notes.byCreatedAt
   if (active === 'all') return list
   return list.filter((n) => n.notebookId === active)
 })
@@ -154,7 +154,6 @@ async function newNote(): Promise<void> {
   const notebookId = notebooks.activeId === 'all' ? null : notebooks.activeId
   const note = await notes.create(notebookId)
   ui.selectNote(note.id)
-  ui.editingNoteId = note.id
 }
 
 function togglePane(): void {
@@ -163,13 +162,15 @@ function togglePane(): void {
 }
 
 // ---------- 多选浮层外部点击关闭 ----------
-// 单击浮层与笔记列表（整个二级侧栏）以外的区域即退出多选
+// 单击浮层与笔记列表（整个二级侧栏）以外的区域即退出多选；
+// Dropdown 菜单已 Teleport 到 body，点击其菜单项不应触发退出
 function onDocMousedown(e: MouseEvent): void {
   if (!selectMode.value) return
   const target = e.target as Node | null
   if (!target) return
   if (batchEl.value?.contains(target)) return
   if (rootEl.value?.contains(target)) return
+  if (target instanceof Element && target.closest('.dd-anchor')) return
   exitSelect()
 }
 
@@ -205,7 +206,7 @@ watch(
 )
 
 // ---------- 键盘交互 ----------
-// ↑ ↓ 切换预览；Enter 编辑；Esc 退出多选
+// ↑ ↓ 切换笔记；Enter 聚焦正文（编辑即预览，无需再"进入编辑"）；Esc 退出多选
 function onKeydown(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
     if (selectMode.value) exitSelect()
@@ -225,7 +226,8 @@ function onKeydown(e: KeyboardEvent): void {
   if (!list.length) return
   e.preventDefault()
   if (e.key === 'Enter') {
-    if (ui.selectedNoteId) ui.editingNoteId = ui.selectedNoteId
+    // 通知笔记页聚焦正文（编辑即预览）
+    if (ui.selectedNoteId) window.dispatchEvent(new CustomEvent('inknote:focus-editor'))
     return
   }
   const idx = list.findIndex((n) => n.id === ui.selectedNoteId)
@@ -320,11 +322,7 @@ onBeforeUnmount(() => {
 
     <!-- ---------- 底部：搜索图标 + 折叠（与一级侧栏底部同款） ---------- -->
     <footer class="np-foot">
-      <button
-        class="np-search-btn"
-        v-tip="{ text: t('common.search'), side: ui.notesCollapsed ? 'right' : 'top' }"
-        @click="ui.searchOpen = true"
-      >
+      <button class="np-search-btn" @click="ui.searchOpen = true">
         <Icon name="search" :size="15" />
       </button>
       <button class="btn-icon np-collapse" @click="togglePane">

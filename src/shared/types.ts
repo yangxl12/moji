@@ -10,7 +10,10 @@ export interface AiConfig {
   baseUrl: string
   /** API 密钥（仅渲染层编辑时可见；存储时由主进程加密） */
   apiKey: string
+  /** 当前使用的模型（必为 models 之一） */
   model: string
+  /** 模型名称列表，本地持久化，可增删改查与切换 */
+  models: string[]
   strength: AiStrength
   /** 可选自定义指令 */
   customPrompt: string

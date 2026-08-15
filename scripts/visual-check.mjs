@@ -3,7 +3,7 @@ import { _electron } from 'playwright-core'
 import { mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 
-const ROOT = 'D:\\myProject\\yxl-todo'
+const ROOT = 'D:\\yxlAgent\\moji'
 const TMP = join(ROOT, '.test-tmp')
 rmSync(TMP, { recursive: true, force: true })
 const userData = join(TMP, 'user-data')
@@ -80,13 +80,12 @@ await page.fill('.ed-title', '视觉检查笔记')
 await page.click('.tiptap')
 await page.keyboard.type('这是一段用于检查排版的文字。字距、行高、衬线字体都应当体现纸墨质感。')
 await pause(1500)
-await page.click('.ed-back')
 await page.waitForSelector('.note-card')
 await pause(600)
 
 {
   const b = await box('.sidebar')
-  check('侧边栏宽度 124px', b.w === 124, JSON.stringify(b))
+  check('侧边栏宽度 180px', b.w === 180, JSON.stringify(b))
 }
 {
   const b = await box('.notes-pane')
@@ -110,39 +109,38 @@ check('条目标题使用内容字体', (await css('.note-title', 'font-family')
 check('条目入场动画生效', (await css('.note-card', 'animation-name')) === 'fade-up', await css('.note-card', 'animation-name'))
 
 {
-  const sheet = await box('.pv-sheet')
-  const pane = await box('.preview')
+  const sheet = await box('.ed-sheet')
+  const pane = await box('.editor-page')
   check(
-    '预览纸页居中于预览区',
+    '笔记纸页居中于笔记页区',
     sheet !== null && pane !== null && Math.abs(sheet.x + sheet.w / 2 - (pane.x + pane.w / 2)) < 8,
     JSON.stringify(sheet)
   )
 }
 {
-  const sheet = await box('.pv-sheet')
-  check('预览纸页宽度受限 ≤760px', sheet.w <= 760, JSON.stringify(sheet))
+  const sheet = await box('.ed-sheet')
+  check('笔记纸页宽度受限 ≤760px', sheet.w <= 760, JSON.stringify(sheet))
 }
-check('预览纸页使用纸面底色', (await css('.pv-sheet', 'background-color')) === 'rgb(251, 247, 236)', await css('.pv-sheet', 'background-color'))
+check('笔记纸页使用纸面底色', (await css('.ed-sheet', 'background-color')) === 'rgb(251, 247, 236)', await css('.ed-sheet', 'background-color'))
 
-console.log('▶ 全屏预览')
-await page.click('.pv-full')
-await page.waitForSelector('.preview.fullscreen')
+console.log('▶ 全屏笔记页')
+await page.click('.ed-full')
+await page.waitForSelector('.editor-page.fullscreen')
 await pause(400)
 {
-  const b = await box('.preview.fullscreen')
+  const b = await box('.editor-page.fullscreen')
   const [vw] = await vp()
-  check('全屏预览铺满工作区且不被横向裁切', Math.abs(b.w - vw) < 3 && b.x === 0, JSON.stringify(b))
+  check('全屏笔记页铺满工作区且不被横向裁切', Math.abs(b.w - vw) < 3 && b.x === 0, JSON.stringify(b))
 }
 {
-  const sheet = await box('.pv-sheet')
+  const sheet = await box('.ed-sheet')
   check('全屏后纸页变宽 ≤900px', sheet.w <= 900, JSON.stringify(sheet))
 }
 await page.keyboard.press('Escape')
 await pause(300)
-check('Esc 退出全屏预览', (await page.locator('.preview.fullscreen').count()) === 0)
+check('Esc 退出全屏笔记页', (await page.locator('.editor-page.fullscreen').count()) === 0)
 
-console.log('▶ 预览 → 编辑（局部页面）')
-await page.click('.pv-edit')
+console.log('▶ 编辑即预览（局部页面）')
 await page.waitForSelector('.ed-sheet')
 await pause(600)
 {
@@ -157,7 +155,7 @@ await pause(600)
 {
   const sidebar = await box('.sidebar')
   const notesPane = await box('.notes-pane')
-  check('编辑时两级侧栏保持可见', sidebar !== null && notesPane !== null && sidebar.w === 124 && notesPane.w === 306)
+  check('编辑时两级侧栏保持可见', sidebar !== null && notesPane !== null && sidebar.w === 180 && notesPane.w === 306)
 }
 check('工具栏胶囊形', (await css('.ed-toolbar', 'border-radius')) === '999px', await css('.ed-toolbar', 'border-radius'))
 {
@@ -187,8 +185,6 @@ await pause(300)
 check('Esc 退出全屏编辑器', (await page.locator('.editor-page.fullscreen').count()) === 0)
 
 console.log('▶ 暗黑主题')
-await page.click('.ed-back')
-await page.waitForSelector('.sb-settings')
 await page.click('.sb-settings')
 await page.waitForSelector('.st-card')
 await page.click('.seg-item:has-text("暗黑")')

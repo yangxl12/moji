@@ -9,7 +9,7 @@
   line-height: 2.05;
   letter-spacing: 0.015em;
   color: var(--ink);
-  min-height: 52vh;
+  min-height: 38vh;
   outline: none;
   caret-color: var(--accent);
   user-select: text;
@@ -18,11 +18,11 @@
 }
 
 .tiptap > * + * {
-  margin-top: 0.85em;
+  margin-top: 0.7em;
 }
 
 .tiptap p {
-  margin: 0 0 0.55em;
+  margin: 0 0 0.45em;
 }
 
 .tiptap h1,
@@ -32,8 +32,8 @@
   font-weight: 700;
   line-height: 1.45;
   letter-spacing: 0.03em;
-  margin-top: 1.4em;
-  margin-bottom: 0.55em;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
 }
 .tiptap h1 {
   font-size: 1.62em;
@@ -82,7 +82,7 @@
   padding-left: 1.5em;
 }
 .tiptap li {
-  margin: 0.28em 0;
+  margin: 0.24em 0;
 }
 .tiptap li::marker {
   color: var(--accent);

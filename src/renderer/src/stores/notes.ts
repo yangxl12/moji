@@ -7,8 +7,9 @@ export const useNotesStore = defineStore('notes', {
     all: [] as NoteMeta[]
   }),
   getters: {
-    byUpdatedAt(state): NoteMeta[] {
-      return [...state.all].sort((a, b) => b.updatedAt - a.updatedAt)
+    /** 按创建时间正序：越早创建的越靠上，最新创建的排在最下方（向下递增） */
+    byCreatedAt(state): NoteMeta[] {
+      return [...state.all].sort((a, b) => a.createdAt - b.createdAt)
     }
   },
   actions: {

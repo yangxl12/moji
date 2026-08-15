@@ -47,7 +47,6 @@ async function createNoteAndOpen(): Promise<void> {
   const note = await notes.create(notebookId)
   if (route.name !== 'home') await router.push('/')
   ui.selectNote(note.id)
-  ui.editingNoteId = note.id
 }
 
 function requestNewNotebook(): void {

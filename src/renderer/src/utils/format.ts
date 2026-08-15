@@ -20,10 +20,3 @@ export function formatDate(ts: number, locale: string): string {
   }
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
-
-export function formatClock(ts: number): string {
-  const d = new Date(ts)
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
-}

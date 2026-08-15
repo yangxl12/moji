@@ -22,11 +22,20 @@ export const clickOutside: Directive<HTMLElement, Handler> = {
 // ---------- 固定定位提示（v-tip） ----------
 // 用 fixed 定位渲染到 body，避免被侧栏 / 面板的 overflow 裁切。
 // 用法：v-tip="'文本'"（默认显示在上方）；v-tip="{ text: '文本', side: 'right' }"（显示在右侧）
-type TipValue = string | { text: string; side?: 'top' | 'right' }
+// text 也支持传函数 (el) => string | null：悬停时才求值，返回空字符串 / null 则不显示
+// （用于"仅当标题被裁切显示省略号时才提示"）。
+type TipText = string | ((el: HTMLElement) => string | null)
+type TipValue = TipText | { text: TipText; side?: 'top' | 'right' }
 interface TipState {
   enter: () => void
   leave: () => void
   scroll: () => void
+}
+
+/** 元素文本是否被裁切（单行省略号或行数截断都会导致 scroll 尺寸超出可视尺寸） */
+export function isTruncated(el: Element | null | undefined): boolean {
+  if (!el) return false
+  return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
 }
 
 let tipEl: HTMLDivElement | null = null
@@ -62,7 +71,8 @@ export const tip: Directive<HTMLElement, TipValue> = {
   mounted(el, binding) {
     const enter = (): void => {
       const b = binding.value
-      const text = typeof b === 'string' ? b : b?.text
+      const raw = typeof b === 'string' || typeof b === 'function' ? b : b?.text
+      const text = typeof raw === 'function' ? raw(el) : raw
       if (!text) return
       const side = typeof b === 'object' ? (b.side ?? 'top') : 'top'
       showTip(el, text, side)

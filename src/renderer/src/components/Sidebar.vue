@@ -6,6 +6,7 @@ import Icon from '@/components/ui/Icon.vue'
 import Dropdown from '@/components/ui/Dropdown.vue'
 import { useNotebooksStore } from '@/stores/notebooks'
 import { useUiStore } from '@/stores/ui'
+import { isTruncated } from '@/utils/directives'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -13,6 +14,11 @@ const notebooks = useNotebooksStore()
 const ui = useUiStore()
 
 const collapsed = computed(() => ui.sidebarCollapsed)
+
+/** 仅当笔记本名被裁切（省略号 / 折叠隐藏）时才提示完整名称 */
+function nbTip(el: HTMLElement, name: string): string | null {
+  return isTruncated(el.querySelector('.sb-item-name')) ? name : null
+}
 
 const creating = ref(false)
 const newName = ref('')
@@ -41,18 +47,25 @@ async function beginCreate(): Promise<void> {
   createInput.value?.focus()
 }
 
+// Enter 与 blur 会先后触发 commitCreate，用锁防止同一名称重复提交
+let createLock = false
+
 async function commitCreate(): Promise<void> {
+  if (!creating.value || createLock) return
   const name = newName.value.trim()
   if (!name) {
     creating.value = false
     return
   }
+  createLock = true
   try {
     await notebooks.create(name)
     creating.value = false
   } catch (e) {
     ui.toast('error', e instanceof Error ? e.message : 'Failed')
     newName.value = ''
+  } finally {
+    createLock = false
   }
 }
 
@@ -147,7 +160,7 @@ function onNotebookMenu(key: string, id: string): void {
             class="sb-item"
             :class="{ active: notebooks.activeId === nb.id }"
             :style="{ animationDelay: `${i * 0.02}s` }"
-            v-tip="{ text: nb.name, side: collapsed ? 'right' : 'top' }"
+            v-tip="{ text: (el: HTMLElement) => nbTip(el, nb.name), side: 'right' }"
             @click="notebooks.select(nb.id)"
           >
             <template v-if="editingId === nb.id && !collapsed">
@@ -164,13 +177,15 @@ function onNotebookMenu(key: string, id: string): void {
             </template>
             <template v-else>
               <span class="sb-item-icon"><Icon name="book" :size="15" /></span>
-              <span class="sb-item-name" :aria-hidden="collapsed || undefined">{{ nb.name }}</span>
+              <span class="sb-item-name" :aria-hidden="collapsed || undefined" :data-nb-title="nb.id">{{ nb.name }}</span>
               <span v-if="!collapsed" class="sb-more" @click.stop>
                 <Dropdown
                   :entries="[
                     { key: 'rename', label: t('common.rename'), icon: 'pencil' },
                     { key: 'delete', label: t('common.delete'), icon: 'trash', danger: true }
                   ]"
+                  align="left"
+                  :anchor-selector="`[data-nb-title='${nb.id}']`"
                   @select="onNotebookMenu($event, nb.id)"
                 >
                   <template #default="{ toggle }">
@@ -185,18 +200,10 @@ function onNotebookMenu(key: string, id: string): void {
     </nav>
 
     <div class="sb-bottom">
-      <button
-        class="sb-item sb-settings"
-        v-tip="{ text: t('common.settings'), side: collapsed ? 'right' : 'top' }"
-        @click="router.push('/settings')"
-      >
+      <button class="sb-item sb-settings" @click="router.push('/settings')">
         <span class="sb-item-icon"><Icon name="settings" :size="15" /></span>
       </button>
-      <button
-        class="btn-icon sb-collapse"
-        :data-tip="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
-        @click="ui.toggleSidebar()"
-      >
+      <button class="btn-icon sb-collapse" @click="ui.toggleSidebar()">
         <Icon :name="collapsed ? 'chevron-right' : 'chevron-left'" :size="15" />
       </button>
     </div>
@@ -219,20 +226,6 @@ function onNotebookMenu(key: string, id: string): void {
 .sidebar.collapsed {
   width: 64px;
   padding: 0.9rem 0.5rem 0.85rem;
-}
-
-/* 折叠后侧栏悬浮工具提示显示在右侧 */
-.sidebar.collapsed [data-tip]::after {
-  left: calc(100% + 10px);
-  bottom: auto;
-  top: 50%;
-  transform: translateY(-50%) translateX(-4px);
-}
-.sidebar.collapsed [data-tip]::before {
-  display: none;
-}
-.sidebar.collapsed [data-tip]:hover::after {
-  transform: translateY(-50%) translateX(0);
 }
 
 .sb-nav {
@@ -362,7 +355,9 @@ function onNotebookMenu(key: string, id: string): void {
   gap: 2px;
 }
 .sb-more {
-  display: none;
+  /* 常驻占位（visibility 切换）：保证标题宽度稳定，弹窗锚点不随悬停漂移 */
+  display: inline-flex;
+  visibility: hidden;
   flex: none;
 }
 .sb-more-btn {
@@ -370,7 +365,7 @@ function onNotebookMenu(key: string, id: string): void {
   height: 1.5rem;
 }
 .sb-item:hover .sb-more {
-  display: inline-flex;
+  visibility: visible;
 }
 .sb-edit-input {
   flex: 1;

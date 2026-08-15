@@ -2,13 +2,13 @@
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Editor } from '@tiptap/vue-3'
-import type { AiStrength } from '@shared/types'
+import type { AiConfig, AiStrength } from '@shared/types'
 import Icon from '@/components/ui/Icon.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { docToText, textToDoc } from '@/utils/text'
-import { cleanIpcError } from '@/utils/ipc'
+import { cleanIpcError, toPlainIpc } from '@/utils/ipc'
 
 const props = defineProps<{ editor: Editor | null; open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -82,10 +82,25 @@ async function start(): Promise<void> {
   })
 
   try {
-    await window.api.startAiPolish({ config: cfg, text, strength: strength.value })
+    // IPC 走结构化克隆，先把响应式状态剥离成纯对象
+    const config: AiConfig = toPlainIpc({ ...cfg })
+    await window.api.startAiPolish({ config, text, strength: strength.value })
   } catch (e) {
     errorMsg.value = cleanIpcError(e)
     phase.value = 'error'
+  }
+}
+
+/** 切换当前使用模型，立即保存到本地（闭环：切换在下次润色时生效） */
+async function switchModel(e: Event): Promise<void> {
+  const v = (e.target as HTMLSelectElement).value
+  const cfg = settings.settings.ai
+  if (!cfg || !v || v === cfg.model) return
+  try {
+    await settings.update({ ai: toPlainIpc({ ...cfg, model: v }) })
+    ui.toast('success', t('ai.modelSwitched', { model: v }))
+  } catch (err) {
+    ui.toast('error', `${t('aic.saveFailed')} · ${cleanIpcError(err)}`)
   }
 }
 
@@ -171,6 +186,17 @@ const strengthDesc = (): string => {
             <label class="ai-label">{{ t('ai.strength') }}</label>
             <SegmentedControl v-model="strength" :options="strengthOptions" />
             <p class="ai-desc">{{ strengthDesc() }}</p>
+          </div>
+          <div v-if="(settings.settings.ai?.models?.length ?? 0) > 1" class="ai-block">
+            <label class="ai-label">{{ t('ai.model') }}</label>
+            <select class="ai-select" :value="settings.settings.ai?.model" @change="switchModel">
+              <option v-for="m in settings.settings.ai?.models ?? []" :key="m" :value="m">{{ m }}</option>
+            </select>
+            <p class="ai-desc">{{ t('ai.modelDesc') }}</p>
+          </div>
+          <div v-if="settings.settings.ai?.customPrompt" class="ai-block ai-note">
+            <Icon name="sparkles" :size="14" />
+            <span>{{ t('ai.customActive', { text: settings.settings.ai.customPrompt }) }}</span>
           </div>
           <div class="ai-block ai-note">
             <Icon name="info" :size="14" />
@@ -353,6 +379,21 @@ const strengthDesc = (): string => {
   font-size: 0.76rem;
   color: var(--ink-3);
   line-height: 1.6;
+}
+.ai-select {
+  width: 100%;
+  height: 2.15rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: 0.84rem;
+  padding: 0 0.6rem;
+  outline: none;
+  cursor: pointer;
+}
+.ai-select:focus {
+  border-color: var(--accent);
 }
 .ai-note {
   flex-direction: row;

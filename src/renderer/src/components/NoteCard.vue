@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import type { NoteMeta } from '@shared/types'
 import { docExcerpt } from '@/utils/text'
+import { isTruncated } from '@/utils/directives'
 
 const props = defineProps<{
   note: NoteMeta
@@ -24,6 +25,11 @@ const title = computed(() => {
   if (own) return own
   return docExcerpt(props.note.content, 60) || t('common.untitled')
 })
+
+/** 仅当标题被裁切显示省略号时才提示完整标题 */
+function titleTip(el: HTMLElement): string | null {
+  return isTruncated(el) ? title.value : null
+}
 </script>
 
 <template>
@@ -33,7 +39,7 @@ const title = computed(() => {
     :style="{ animationDelay: `${Math.min(index, 12) * 0.02}s` }"
     @click="emit('open')"
   >
-    <span class="note-title clamp-1">{{ title }}</span>
+    <span class="note-title clamp-1" v-tip="titleTip">{{ title }}</span>
     <button class="note-check" :class="{ checked: selected }" @click.stop="emit('toggle')">
       <Transition name="check-pop">
         <Icon v-if="selected" name="check" :size="12" />

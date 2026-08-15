@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineModel, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 
 interface SegOption {
   value: string

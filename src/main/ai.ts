@@ -92,7 +92,11 @@ export async function testAi(config: AiConfig): Promise<AiTestResult> {
       body: JSON.stringify({
         model: config.model,
         messages: [
-          { role: 'system', content: '你是一个助手。' },
+          {
+            role: 'system',
+            // 测试连接同样携带自定义指令，便于用户验证指令是否按预期影响模型回复
+            content: '你是一个助手。' + (config.customPrompt?.trim() ? `\n\n此外，请严格遵循以下额外要求：\n${config.customPrompt.trim()}` : '')
+          },
           { role: 'user', content: '请只回复四个字：连接成功' }
         ],
         temperature: 0.2,

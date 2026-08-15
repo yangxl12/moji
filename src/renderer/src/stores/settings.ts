@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { i18n } from '@/i18n'
+import { toPlainIpc } from '@/utils/ipc'
 import type { Settings, ThemeMode } from '@shared/types'
 
 const DEFAULTS: Settings = {
@@ -59,7 +60,8 @@ export const useSettingsStore = defineStore('settings', {
       }
     },
     async update(patch: Partial<Settings>): Promise<void> {
-      const saved = await window.api.saveSettings(patch)
+      // 剥掉 Vue 响应式 Proxy 再走 IPC，避免 "could not be cloned" 导致保存失败
+      const saved = await window.api.saveSettings(toPlainIpc(patch))
       this.settings = { ...this.settings, ...saved }
       this.apply()
     }

@@ -7,7 +7,7 @@ import Icon from '@/components/ui/Icon.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
-import { cleanIpcError } from '@/utils/ipc'
+import { cleanIpcError, toPlainIpc } from '@/utils/ipc'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -28,10 +28,68 @@ const form = reactive<AiConfig>({
   baseUrl: existing?.baseUrl ?? '',
   apiKey: '',
   model: existing?.model ?? '',
+  models: [...(existing?.models?.length ? existing.models : existing?.model ? [existing.model] : [])],
   strength: existing?.strength ?? 'standard',
   customPrompt: existing?.customPrompt ?? '',
   temperatures: existing?.temperatures
 })
+
+// ---------- 模型列表（本地持久化：增删改查 + 切换） ----------
+const newModel = ref('')
+const editingIdx = ref(-1)
+const editingName = ref('')
+
+function selectModel(m: string): void {
+  form.model = m
+  markDirty()
+}
+
+function addModel(): void {
+  const name = newModel.value.trim()
+  if (!name) return
+  if (!form.models.includes(name)) form.models.push(name)
+  form.model = name
+  newModel.value = ''
+  markDirty()
+}
+
+function removeModel(i: number): void {
+  const removed = form.models[i]
+  form.models.splice(i, 1)
+  if (form.model === removed) form.model = form.models[0] ?? ''
+  markDirty()
+}
+
+function beginRename(i: number): void {
+  editingIdx.value = i
+  editingName.value = form.models[i]
+}
+
+function commitRename(): void {
+  if (editingIdx.value < 0) return
+  const i = editingIdx.value
+  const name = editingName.value.trim()
+  if (name) {
+    const old = form.models[i]
+    const dup = form.models.findIndex((m, j) => j !== i && m === name)
+    if (dup >= 0) {
+      // 重名则合并：删除当前项
+      form.models.splice(i, 1)
+      if (form.model === old || form.model === '') form.model = name
+    } else {
+      form.models[i] = name
+      if (form.model === old) form.model = name
+    }
+    markDirty()
+  }
+  editingIdx.value = -1
+  editingName.value = ''
+}
+
+function cancelRename(): void {
+  editingIdx.value = -1
+  editingName.value = ''
+}
 
 const hasKey = ref(!!existing?.apiKey)
 const showKey = ref(false)
@@ -64,18 +122,24 @@ function markDirty(): void {
 
 function fillProvider(p: { baseUrl: string; model: string }): void {
   form.baseUrl = p.baseUrl
+  if (!form.models.includes(p.model)) form.models.push(p.model)
   form.model = p.model
   markDirty()
 }
 
 function buildConfig(): AiConfig {
+  // 当前模型不在列表时并入列表，保证保存后列表与当前模型一致
+  const models = [...form.models]
+  const current = form.model.trim()
+  if (current && !models.includes(current)) models.unshift(current)
   return {
     baseUrl: form.baseUrl.trim(),
     apiKey: form.apiKey.trim(),
-    model: form.model.trim(),
+    model: current,
+    models,
     strength: form.strength,
     customPrompt: form.customPrompt.trim(),
-    temperatures: form.temperatures
+    temperatures: form.temperatures ? { ...form.temperatures } : undefined
   }
 }
 
@@ -88,7 +152,7 @@ async function doTest(): Promise<void> {
   }
   testState.value = 'testing'
   testResult.value = {}
-  const r = await window.api.testAi({ ...cfg, apiKey: key })
+  const r = await window.api.testAi(toPlainIpc({ ...cfg, apiKey: key }))
   if (r.ok) {
     testState.value = 'ok'
     testResult.value = { latencyMs: r.latencyMs, reply: r.reply }
@@ -96,6 +160,12 @@ async function doTest(): Promise<void> {
     testState.value = 'fail'
     testResult.value = { error: r.error }
   }
+}
+
+/** 按来路返回：从编辑页（主页）跳转而来 → 回到编辑页；从设置跳转而来 → 回到设置 */
+function leave(): void {
+  if (window.history.length > 1) router.back()
+  else router.push('/')
 }
 
 async function save(): Promise<void> {
@@ -106,12 +176,12 @@ async function save(): Promise<void> {
     return
   }
   try {
-    await settings.update({ ai: { ...cfg, apiKey: key } })
+    await settings.update({ ai: toPlainIpc({ ...cfg, apiKey: key }) })
     ui.toast('success', t('aic.saved'))
     dirty.value = false
     hasKey.value = true
     form.apiKey = ''
-    setTimeout(() => router.back(), 350)
+    setTimeout(() => leave(), 350)
   } catch (e) {
     ui.toast('error', `${t('aic.saveFailed')} · ${cleanIpcError(e)}`)
   }
@@ -122,7 +192,7 @@ async function goBack(): Promise<void> {
     const ok = await ui.confirm({ title: t('aic.backConfirm'), okText: t('common.confirm') })
     if (!ok) return
   }
-  router.push('/settings')
+  leave()
 }
 </script>
 
@@ -187,10 +257,52 @@ async function goBack(): Promise<void> {
             <p v-if="hasKey" class="aic-hint">{{ t('aic.apiKeyKeep') }}</p>
           </div>
 
-          <!-- 模型 -->
+          <!-- 模型列表（本地保存，可增删改查与切换） -->
           <div class="aic-block">
-            <label class="aic-label">{{ t('aic.model') }}</label>
+            <label class="aic-label">{{ t('aic.models') }}</label>
+            <div v-if="form.models.length" class="aic-models">
+              <div v-for="(m, i) in form.models" :key="m" class="aic-model" :class="{ active: form.model === m }">
+                <template v-if="editingIdx === i">
+                  <input
+                    v-model="editingName"
+                    class="aic-model-rename"
+                    spellcheck="false"
+                    @keydown.enter.prevent="commitRename"
+                    @keydown.esc.prevent="cancelRename"
+                    @blur="commitRename"
+                  />
+                </template>
+                <template v-else>
+                  <button class="aic-model-name" :data-tip="t('aic.modelSwitch')" @click="selectModel(m)">
+                    <Icon v-if="form.model === m" name="check" :size="11" />
+                    {{ m }}
+                  </button>
+                  <button class="aic-model-op" :data-tip="t('aic.modelRename')" @click="beginRename(i)">
+                    <Icon name="pencil" :size="11" />
+                  </button>
+                  <button class="aic-model-op aic-model-del" :data-tip="t('aic.modelDelete')" @click="removeModel(i)">
+                    <Icon name="x" :size="11" />
+                  </button>
+                </template>
+              </div>
+            </div>
+            <p v-else class="aic-hint">{{ t('aic.modelsEmpty') }}</p>
+            <div class="aic-model-add">
+              <input
+                v-model="newModel"
+                class="input"
+                :placeholder="t('aic.modelAddPh')"
+                spellcheck="false"
+                @keydown.enter.prevent="addModel"
+              />
+              <button class="btn btn-ghost btn-sm" :disabled="!newModel.trim()" @click="addModel">
+                <Icon name="plus" :size="13" />
+                {{ t('aic.addModel') }}
+              </button>
+            </div>
+            <label class="aic-label">{{ t('aic.currentModel') }}</label>
             <input v-model="form.model" class="input" :placeholder="t('aic.modelPh')" spellcheck="false" @input="markDirty" />
+            <p class="aic-hint">{{ t('aic.modelHint') }}</p>
           </div>
 
           <!-- 强度 -->
@@ -209,7 +321,7 @@ async function goBack(): Promise<void> {
             <label class="aic-label">{{ t('aic.custom') }}</label>
             <textarea
               v-model="form.customPrompt"
-              class="input"
+              class="input aic-custom-input"
               rows="3"
               :placeholder="t('aic.customPh')"
               @input="markDirty"
@@ -357,6 +469,88 @@ async function goBack(): Promise<void> {
   border-color: var(--accent);
   background: var(--accent-soft);
   transform: translateY(-1px);
+}
+.aic-models {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.aic-model {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0.22rem 0.4rem;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.aic-model.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-soft);
+}
+.aic-model-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-align: left;
+  font-size: 0.82rem;
+  color: var(--ink);
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.aic-model-name svg {
+  color: var(--accent);
+  flex: none;
+}
+.aic-model.active .aic-model-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+.aic-model-op {
+  flex: none;
+  width: 1.55rem;
+  height: 1.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--ink-3);
+  opacity: 0;
+  transition: all 0.15s var(--ease);
+}
+.aic-model:hover .aic-model-op {
+  opacity: 1;
+}
+.aic-model-op:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.aic-model-del:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+.aic-model-rename {
+  flex: 1;
+  height: 1.8rem;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0 0.45rem;
+  font-size: 0.82rem;
+  color: var(--ink);
+  outline: none;
+}
+.aic-model-add {
+  display: flex;
+  gap: 0.45rem;
+}
+.aic-model-add .input {
+  flex: 1;
 }
 .aic-key-wrap {
   position: relative;

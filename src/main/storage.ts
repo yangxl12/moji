@@ -80,6 +80,21 @@ async function atomicWrite(file: string, data: string): Promise<void> {
 }
 
 // ---------- 初始化 ----------
+/** 在存储目录写入 .gitignore 护盾：API 密钥（加密后）存在 settings.json，绝不能进版本库 */
+async function writeGitShield(dir: string): Promise<void> {
+  const file = join(dir, '.gitignore')
+  if (existsSync(file)) return
+  try {
+    await fs.writeFile(
+      file,
+      '# 墨记 InkNote 自动生成\n# settings.json 含 API 密钥（系统级加密），请勿提交到版本库\nsettings.json\n',
+      'utf-8'
+    )
+  } catch {
+    /* 存储目录不可写时忽略 */
+  }
+}
+
 export async function initStorage(dir: string): Promise<{ ok: boolean; error?: string; dir?: string }> {
   try {
     const abs = resolve(dir)
@@ -95,6 +110,7 @@ export async function initStorage(dir: string): Promise<{ ok: boolean; error?: s
     await fs.mkdir(join(abs, IMAGE_DIR), { recursive: true })
     if (!existsSync(join(abs, SETTINGS_FILE))) await atomicWrite(join(abs, SETTINGS_FILE), JSON.stringify(DEFAULT_SETTINGS, null, 2))
     if (!existsSync(join(abs, NOTEBOOKS_FILE))) await atomicWrite(join(abs, NOTEBOOKS_FILE), JSON.stringify([], null, 2))
+    await writeGitShield(abs)
     await setRootDir(abs)
     return { ok: true, dir: abs }
   } catch (e) {
@@ -117,6 +133,7 @@ export async function migrateStorage(dir: string): Promise<{ ok: boolean; error?
     await fs.cp(join(oldRoot, IMAGE_DIR), join(abs, IMAGE_DIR), { recursive: true })
     if (existsSync(join(oldRoot, SETTINGS_FILE))) await fs.copyFile(join(oldRoot, SETTINGS_FILE), join(abs, SETTINGS_FILE))
     if (existsSync(join(oldRoot, NOTEBOOKS_FILE))) await fs.copyFile(join(oldRoot, NOTEBOOKS_FILE), join(abs, NOTEBOOKS_FILE))
+    await writeGitShield(abs)
     await setRootDir(abs)
     return { ok: true }
   } catch (e) {
@@ -130,30 +147,46 @@ export async function openStorageDir(): Promise<void> {
 }
 
 // ---------- API Key 加密 ----------
-function encryptKey(key: string): { enc?: string; plain?: string } {
+// 历史 bug 修复说明：早期版本加密结果写成了 { enc } / { plain } 字段，
+// 而解密函数读的是 apiKeyEnc / apiKeyPlain，导致保存后密钥永远读不回来（表现为“配置丢了”）。
+// 现在统一写 apiKeyEnc / apiKeyPlain，解密时兼容读取旧字段，已保存的密钥可自动恢复。
+function encryptKey(key: string): { apiKeyEnc?: string; apiKeyPlain?: string } {
   if (!key) return {}
   try {
     if (safeStorage.isEncryptionAvailable()) {
-      return { enc: safeStorage.encryptString(key).toString('base64') }
+      return { apiKeyEnc: safeStorage.encryptString(key).toString('base64') }
     }
   } catch {
     /* fall through */
   }
-  return { plain: Buffer.from(key, 'utf-8').toString('base64') }
+  return { apiKeyPlain: Buffer.from(key, 'utf-8').toString('base64') }
 }
 
-function decryptKey(ai: { apiKeyEnc?: string; apiKeyPlain?: string; apiKey?: string } | null): string {
+interface EncryptedKeyFields {
+  apiKeyEnc?: string
+  apiKeyPlain?: string
+  apiKey?: string
+  /** 旧版本遗留字段（兼容读取） */
+  enc?: string
+  plain?: string
+}
+
+function decryptKey(ai: EncryptedKeyFields | null): string {
   if (!ai) return ''
-  try {
-    if (ai.apiKeyEnc && safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(ai.apiKeyEnc, 'base64'))
-    }
-  } catch {
-    /* fall through */
-  }
-  if (ai.apiKeyPlain) {
+  const enc = ai.apiKeyEnc ?? ai.enc
+  if (enc) {
     try {
-      return Buffer.from(ai.apiKeyPlain, 'base64').toString('utf-8')
+      if (safeStorage.isEncryptionAvailable()) {
+        return safeStorage.decryptString(Buffer.from(enc, 'base64'))
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  const plain = ai.apiKeyPlain ?? ai.plain
+  if (plain) {
+    try {
+      return Buffer.from(plain, 'base64').toString('utf-8')
     } catch {
       return ''
     }
@@ -161,13 +194,43 @@ function decryptKey(ai: { apiKeyEnc?: string; apiKeyPlain?: string; apiKey?: str
   return ai.apiKey ?? ''
 }
 
-type StoredAi = Omit<AiConfig, 'apiKey'> & { apiKeyEnc?: string; apiKeyPlain?: string }
+/** 清洗模型名称列表：去空白、去重、去空、限量 */
+function normalizeModels(models: unknown): string[] {
+  if (!Array.isArray(models)) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const m of models) {
+    const name = typeof m === 'string' ? m.trim() : ''
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    out.push(name)
+    if (out.length >= 100) break
+  }
+  return out
+}
+
+/** 保证 model 与 models 列表一致：当前模型不在列表时并入列表；列表非空而当前模型为空时取第一个 */
+function normalizeModelSelection(ai: { model?: string; models?: string[] }): { model: string; models: string[] } {
+  const models = normalizeModels(ai.models)
+  let model = typeof ai.model === 'string' ? ai.model.trim() : ''
+  if (!model && models.length) model = models[0]
+  if (model && !models.includes(model)) models.unshift(model)
+  return { model, models }
+}
+
+type StoredAi = Omit<AiConfig, 'apiKey' | 'models'> & {
+  apiKeyEnc?: string
+  apiKeyPlain?: string
+  models?: string[]
+}
 
 function serializeAi(ai: AiConfig, existing: AiConfig | null): StoredAi {
   const key = ai.apiKey !== '' ? ai.apiKey : (existing?.apiKey ?? '')
+  const { model, models } = normalizeModelSelection(ai)
   return {
     baseUrl: ai.baseUrl,
-    model: ai.model,
+    model,
+    models,
     strength: ai.strength,
     customPrompt: ai.customPrompt,
     temperatures: ai.temperatures,
@@ -177,10 +240,12 @@ function serializeAi(ai: AiConfig, existing: AiConfig | null): StoredAi {
 
 function hydrateAi(stored: StoredAi | null | undefined): AiConfig | null {
   if (!stored) return null
+  const { model, models } = normalizeModelSelection(stored)
   return {
     baseUrl: stored.baseUrl,
-    apiKey: decryptKey(stored as never),
-    model: stored.model,
+    apiKey: decryptKey(stored),
+    model,
+    models,
     strength: stored.strength,
     customPrompt: stored.customPrompt,
     temperatures: stored.temperatures
@@ -192,14 +257,20 @@ export async function loadSettings(): Promise<Settings> {
   const root = await getRootDir()
   const defaults = { ...DEFAULT_SETTINGS }
   if (!root) return defaults
+  const file = join(root, SETTINGS_FILE)
+  let raw: Record<string, unknown>
   try {
-    const raw = JSON.parse(await fs.readFile(join(root, SETTINGS_FILE), 'utf-8'))
-    const merged: Settings = { ...defaults, ...raw }
-    merged.ai = hydrateAi(raw.ai)
-    return merged
-  } catch {
+    raw = JSON.parse(await fs.readFile(file, 'utf-8'))
+  } catch (e) {
+    // 文件损坏时不静默返回默认值：先把原文件备份，避免下一次保存直接覆盖、造成不可恢复的丢失
+    const backup = `${file}.corrupt-${Date.now()}`
+    await fs.rename(file, backup).catch(() => undefined)
+    console.error(`[storage] settings.json 解析失败，已备份到 ${backup}:`, e)
     return defaults
   }
+  const merged: Settings = { ...defaults, ...raw }
+  merged.ai = hydrateAi(raw.ai as StoredAi | null | undefined)
+  return merged
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {

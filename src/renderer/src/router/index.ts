@@ -16,7 +16,7 @@ const router = createRouter({
       component: () => import('@/views/HomeView.vue')
     },
     {
-      // 编辑器已改为主页内的局部页面（见 HomeView + ui.editingNoteId），
+      // 笔记页为主页内的局部页面（编辑即预览，见 HomeView + ui.selectedNoteId），
       // 旧链接一律回主页
       path: '/note/:id',
       redirect: '/'

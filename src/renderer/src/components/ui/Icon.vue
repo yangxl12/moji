@@ -12,10 +12,11 @@ type El =
 
 const ICONS: Record<string, El[]> = {
   search: [
-    { kind: 'circle', cx: 11, cy: 11, r: 7 },
-    { kind: 'path', d: 'M21 21l-4.35-4.35' }
+    { kind: 'path', d: 'M10.6 3.2a7.4 7.4 0 1 0 0 14.8a7.4 7.4 0 0 0 0-14.8z' },
+    { kind: 'path', d: 'M16.2 16.2L21 21' }
   ],
   plus: [{ kind: 'path', d: 'M12 5v14M5 12h14' }],
+  'arrow-up': [{ kind: 'path', d: 'M12 19V5M5 12l7-7 7 7' }],
   minus: [{ kind: 'path', d: 'M5 12h14' }],
   settings: [
     {
@@ -80,6 +81,13 @@ const ICONS: Record<string, El[]> = {
   copy: [
     { kind: 'path', d: 'M9 9h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z' },
     { kind: 'path', d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }
+  ],
+  selectAll: [
+    { kind: 'path', d: 'M8 3H5a2 2 0 0 0-2 2v3' },
+    { kind: 'path', d: 'M16 3h3a2 2 0 0 1 2 2v3' },
+    { kind: 'path', d: 'M21 16v3a2 2 0 0 1-2 2h-3' },
+    { kind: 'path', d: 'M8 21H5a2 2 0 0 0-2-2v-3' },
+    { kind: 'path', d: 'M8.5 12l2.5 2.5 4.5-4.5' }
   ],
   move: [
     { kind: 'path', d: 'M5 9l-3 3 3 3' },

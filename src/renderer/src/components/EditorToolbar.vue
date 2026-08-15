@@ -199,8 +199,8 @@ const groups = computed<Btn[][]>(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
-  padding: 0.45rem 0.8rem;
+  gap: 0.22rem;
+  padding: 0.38rem 0.7rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(10px);
@@ -218,14 +218,14 @@ const groups = computed<Btn[][]>(() => {
 }
 .ed-tb-sep {
   width: 1px;
-  height: 1.15rem;
+  height: 1.05rem;
   background: var(--line);
-  margin: 0 0.25rem;
+  margin: 0 0.2rem;
   flex: none;
 }
 .ed-tb-btn {
-  width: 1.95rem;
-  height: 1.95rem;
+  width: 1.85rem;
+  height: 1.85rem;
   border-radius: 8px;
   display: inline-flex;
   align-items: center;
