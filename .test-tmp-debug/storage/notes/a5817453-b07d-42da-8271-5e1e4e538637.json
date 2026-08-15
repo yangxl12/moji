@@ -1,0 +1,25 @@
+{
+  "id": "a5817453-b07d-42da-8271-5e1e4e538637",
+  "title": "调试笔记",
+  "notebookId": null,
+  "content": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "attrs": {
+          "textAlign": null
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "全屏预览几何调试。"
+          }
+        ]
+      }
+    ]
+  },
+  "createdAt": 1786723810735,
+  "updatedAt": 1786723812721,
+  "images": []
+}

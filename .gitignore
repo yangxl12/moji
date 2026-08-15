@@ -1,0 +1,11 @@
+node_modules/
+.npm-cache/
+.test-tmp/
+out/
+dist/
+release/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example

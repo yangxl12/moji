@@ -1,0 +1,179 @@
+/* ============================================================
+   编辑器内容（TipTap / ProseMirror）排版
+   纸张上的铅字
+   ============================================================ */
+
+.tiptap {
+  font-family: var(--font-content);
+  font-size: 1.06rem;
+  line-height: 2.05;
+  letter-spacing: 0.015em;
+  color: var(--ink);
+  min-height: 52vh;
+  outline: none;
+  caret-color: var(--accent);
+  user-select: text;
+  cursor: text;
+  word-break: break-word;
+}
+
+.tiptap > * + * {
+  margin-top: 0.85em;
+}
+
+.tiptap p {
+  margin: 0 0 0.55em;
+}
+
+.tiptap h1,
+.tiptap h2,
+.tiptap h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  margin-top: 1.4em;
+  margin-bottom: 0.55em;
+}
+.tiptap h1 {
+  font-size: 1.62em;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--line);
+}
+.tiptap h2 {
+  font-size: 1.32em;
+}
+.tiptap h3 {
+  font-size: 1.14em;
+  color: var(--ink-2);
+}
+
+.tiptap strong {
+  font-weight: 700;
+}
+.tiptap em {
+  font-style: italic;
+}
+.tiptap u {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  text-underline-offset: 3px;
+}
+.tiptap s {
+  text-decoration: line-through;
+  color: var(--ink-3);
+}
+
+.tiptap blockquote {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 0.65em 1.1em;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  color: var(--ink-2);
+  font-style: italic;
+  margin: 1em 0;
+}
+.tiptap blockquote p {
+  margin: 0;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.5em;
+}
+.tiptap li {
+  margin: 0.28em 0;
+}
+.tiptap li::marker {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tiptap pre {
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0.9em 1.1em;
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  line-height: 1.7;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+.tiptap code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.1em 0.42em;
+}
+.tiptap pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 1em;
+}
+
+.tiptap hr {
+  border: none;
+  margin: 1.8em 0;
+  overflow: visible;
+}
+.tiptap hr::after {
+  content: '· · ·';
+  display: block;
+  text-align: center;
+  color: var(--ink-3);
+  letter-spacing: 0.7em;
+  font-size: 0.95em;
+}
+
+.tiptap img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.1em auto;
+  border-radius: 12px;
+  box-shadow: var(--shadow-2);
+  transition: box-shadow 0.2s var(--ease), outline-color 0.2s var(--ease);
+}
+.tiptap img.ProseMirror-selectednode {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 14px;
+}
+
+.tiptap a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.tiptap a:hover {
+  filter: brightness(1.15);
+}
+
+/* 占位符 */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.tiptap ::selection {
+  background: var(--accent-soft);
+}
+
+/* 拖拽中的图片占位 */
+.tiptap .drop-block {
+  border: 2px dashed var(--accent);
+  border-radius: var(--r);
+  padding: 2em;
+  text-align: center;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
