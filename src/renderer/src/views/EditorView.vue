@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Editor, EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
@@ -20,14 +20,18 @@ import { formatClock } from '@/utils/format'
 import { cleanIpcError } from '@/utils/ipc'
 import '@/styles/editor.css'
 
-const route = useRoute()
+const props = defineProps<{
+  /** 要编辑的笔记 id（由 HomeView 传入，以局部页面形式嵌入主页） */
+  noteId: string
+}>()
+
 const router = useRouter()
 const { t } = useI18n()
 const notes = useNotesStore()
 const ui = useUiStore()
 
-// 挂载时固化笔记 id（不能从 route 动态取：卸载落盘时路由已切换，会拿到 undefined）
-const noteId = String(route.params.id)
+// 挂载时固化笔记 id（不能从 props 动态取：卸载落盘时组件即将销毁，props 仍可用，保持不变）
+const noteId = props.noteId
 
 const title = ref('')
 const loading = ref(true)
@@ -138,7 +142,8 @@ function onFileChange(e: Event): void {
 
 async function goBack(): Promise<void> {
   await flushSave()
-  router.push('/')
+  ui.fullscreenEditor = false
+  ui.editingNoteId = null
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -159,13 +164,14 @@ onMounted(async () => {
   const note = notes.get(noteId) ?? (await window.api.getNote(noteId))
   if (!note) {
     ui.toast('error', 'Note not found')
-    router.replace('/')
+    ui.editingNoteId = null
     return
   }
   // 返回主页后预览这篇笔记
   ui.selectedNoteId = note.id
-  // 从全屏预览进入编辑时收起全屏
+  // 从全屏预览进入编辑时收起全屏；每次进入编辑都从非全屏开始
   ui.fullscreenPreview = false
+  ui.fullscreenEditor = false
   title.value = note.title
   editor.value?.commands.setContent((note.content as never) ?? { type: 'doc', content: [] })
   wordCount.value = countWords(editor.value?.getJSON() ?? null)
@@ -200,7 +206,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="editor-page">
+  <div class="editor-page" :class="{ fullscreen: ui.fullscreenEditor }">
     <header class="ed-top">
       <div class="ed-row1">
         <button class="btn-icon ed-back" :data-tip="t('common.back')" @click="goBack">
@@ -240,6 +246,13 @@ onBeforeUnmount(() => {
           <Icon name="settings" :size="15" />
           {{ t('editor.aiConfig') }}
         </button>
+        <button
+          class="btn-icon ed-full"
+          :data-tip="ui.fullscreenEditor ? t('editor.exitFullscreen') : t('editor.fullscreen')"
+          @click="ui.fullscreenEditor = !ui.fullscreenEditor"
+        >
+          <Icon :name="ui.fullscreenEditor ? 'restore' : 'maximize'" :size="15" />
+        </button>
       </div>
 
       <div class="ed-row2">
@@ -268,12 +281,36 @@ onBeforeUnmount(() => {
 <style scoped>
 .editor-page {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
   background:
     radial-gradient(ellipse 70% 40% at 50% -5%, color-mix(in srgb, var(--accent) 4%, transparent), transparent),
     var(--bg);
+}
+
+/* ---------- 全屏编辑（与全屏预览同构：铺满工作区，遮住两侧侧栏） ---------- */
+.editor-page.fullscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background:
+    radial-gradient(ellipse 70% 45% at 50% -8%, color-mix(in srgb, var(--accent) 5%, transparent), transparent),
+    color-mix(in srgb, var(--bg) 96%, transparent);
+  animation: ed-fade-in 0.28s var(--ease-out);
+}
+@keyframes ed-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.editor-page.fullscreen .ed-sheet {
+  max-width: 900px;
 }
 .ed-top {
   flex: none;
@@ -344,15 +381,17 @@ onBeforeUnmount(() => {
   padding: 1.1rem 2rem 3.2rem;
 }
 .ed-sheet {
-  max-width: 830px;
+  /* 默认与预览纸页同宽同高，保证"局部编辑页"观感一致 */
+  max-width: 760px;
   margin: 0 auto;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);
   padding: 3rem 3.6rem 4rem;
-  min-height: 62vh;
+  min-height: 56vh;
   animation: fade-up 0.4s var(--ease-out);
+  transition: max-width 0.32s var(--ease-out);
 }
 .ed-file-input {
   display: none;

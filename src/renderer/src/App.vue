@@ -45,8 +45,9 @@ async function createNoteAndOpen(): Promise<void> {
   const notes = useNotesStore()
   const notebookId = notebooks.activeId === 'all' ? null : notebooks.activeId
   const note = await notes.create(notebookId)
-  ui.selectedNoteId = note.id
-  await router.push(`/note/${note.id}`)
+  if (route.name !== 'home') await router.push('/')
+  ui.selectNote(note.id)
+  ui.editingNoteId = note.id
 }
 
 function requestNewNotebook(): void {

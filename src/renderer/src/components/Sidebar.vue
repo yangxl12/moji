@@ -211,14 +211,14 @@ function onNotebookMenu(key: string, id: string): void {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  padding: 0.7rem 0.55rem 0.6rem;
+  padding: 0.9rem 0.55rem 0.85rem;
   gap: 0.6rem;
   min-height: 0;
   transition: width 0.32s var(--spring), padding 0.32s var(--spring);
 }
 .sidebar.collapsed {
   width: 64px;
-  padding: 0.7rem 0.5rem 0.6rem;
+  padding: 0.9rem 0.5rem 0.85rem;
 }
 
 /* 折叠后侧栏悬浮工具提示显示在右侧 */
@@ -321,8 +321,9 @@ function onNotebookMenu(key: string, id: string): void {
   align-items: center;
   justify-content: space-between;
   padding: 0 0.5rem;
-  margin-bottom: 0.3rem;
-  min-height: 1.6rem;
+  margin-bottom: 0.45rem;
+  /* 与二级侧栏头部行等高，保证两侧顶部行水平对齐 */
+  min-height: 2rem;
 }
 /* 折叠时标题与分割线快速交叉淡入，节奏与宽度回弹一致 */
 .sb-section-head .fade-enter-active,
@@ -344,8 +345,8 @@ function onNotebookMenu(key: string, id: string): void {
   background: var(--line);
 }
 .sb-add {
-  width: 1.7rem;
-  height: 1.7rem;
+  width: 2rem;
+  height: 2rem;
 }
 .sb-input-wrap {
   margin: 0.1rem 0 0.4rem;

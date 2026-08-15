@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import Icon from '@/components/ui/Icon.vue'
 import Dropdown from '@/components/ui/Dropdown.vue'
 import NoteCard from '@/components/NoteCard.vue'
@@ -10,7 +9,6 @@ import { useNotebooksStore } from '@/stores/notebooks'
 import { useUiStore } from '@/stores/ui'
 
 const { t } = useI18n()
-const router = useRouter()
 const notes = useNotesStore()
 const notebooks = useNotebooksStore()
 const ui = useUiStore()
@@ -152,10 +150,11 @@ function openNote(id: string): void {
 }
 
 async function newNote(): Promise<void> {
+  if (selectMode.value) exitSelect()
   const notebookId = notebooks.activeId === 'all' ? null : notebooks.activeId
   const note = await notes.create(notebookId)
-  ui.selectedNoteId = note.id
-  router.push(`/note/${note.id}`)
+  ui.selectNote(note.id)
+  ui.editingNoteId = note.id
 }
 
 function togglePane(): void {
@@ -163,10 +162,15 @@ function togglePane(): void {
   ui.toggleNotesPane()
 }
 
-/** 底部搜索框只是搜索浮层的入口：获得焦点即打开浮层并归还焦点 */
-function openSearchFromInput(e: FocusEvent): void {
-  ui.searchOpen = true
-  ;(e.target as HTMLInputElement).blur()
+// ---------- 多选浮层外部点击关闭 ----------
+// 单击浮层与笔记列表（整个二级侧栏）以外的区域即退出多选
+function onDocMousedown(e: MouseEvent): void {
+  if (!selectMode.value) return
+  const target = e.target as Node | null
+  if (!target) return
+  if (batchEl.value?.contains(target)) return
+  if (rootEl.value?.contains(target)) return
+  exitSelect()
 }
 
 // ---------- 选中态与列表联动 ----------
@@ -221,7 +225,7 @@ function onKeydown(e: KeyboardEvent): void {
   if (!list.length) return
   e.preventDefault()
   if (e.key === 'Enter') {
-    if (ui.selectedNoteId) router.push(`/note/${ui.selectedNoteId}`)
+    if (ui.selectedNoteId) ui.editingNoteId = ui.selectedNoteId
     return
   }
   const idx = list.findIndex((n) => n.id === ui.selectedNoteId)
@@ -239,10 +243,12 @@ function onKeydown(e: KeyboardEvent): void {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('resize', updateBatchPos)
+  document.addEventListener('mousedown', onDocMousedown)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('resize', updateBatchPos)
+  document.removeEventListener('mousedown', onDocMousedown)
 })
 </script>
 
@@ -254,25 +260,17 @@ onBeforeUnmount(() => {
         <Icon name="book" :size="14" />
         {{ activeTitle }}
       </h2>
-      <button class="btn-icon np-head-new sb-new" :data-tip="t('sidebar.newNote')" @click="newNote">
+      <button class="btn-icon np-head-new sb-new" @click="newNote">
         <Icon name="plus" :size="15" />
       </button>
     </header>
 
-    <!-- ---------- 折叠态：顶部竖直工具条 ---------- -->
+    <!-- ---------- 折叠态：顶部竖直工具条（仅新建 + 分割线） ---------- -->
     <header v-if="ui.notesCollapsed" class="np-head-rail">
-      <button v-tip="{ text: t('sidebar.search'), side: 'right' }" class="btn-icon" @click="ui.searchOpen = true">
-        <Icon name="search" :size="15" />
-      </button>
-      <button
-        v-tip="{ text: t('sidebar.newNote'), side: 'right' }"
-        class="btn-icon np-rail-new sb-new"
-        @click="newNote"
-      >
+      <button class="btn-icon np-rail-new sb-new" @click="newNote">
         <Icon name="plus" :size="15" />
       </button>
       <span class="np-rail-line" />
-      <span class="np-rail-count">{{ visibleNotes.length }}</span>
     </header>
 
     <!-- ---------- 列表 / 书脊轨道 ---------- -->
@@ -320,22 +318,17 @@ onBeforeUnmount(() => {
       </nav>
     </div>
 
-    <!-- ---------- 底部：搜索 / 折叠 ---------- -->
+    <!-- ---------- 底部：搜索图标 + 折叠（与一级侧栏底部同款） ---------- -->
     <footer class="np-foot">
-      <template v-if="!ui.notesCollapsed">
-        <input
-          readonly
-          class="input np-search-input"
-          :placeholder="t('notesPane.searchPlaceholder')"
-          @click="ui.searchOpen = true"
-          @focus="openSearchFromInput"
-        />
-        <button class="btn-icon np-collapse" :data-tip="t('notesPane.collapse')" @click="togglePane">
-          <Icon name="chevron-left" :size="15" />
-        </button>
-      </template>
-      <button v-else v-tip="{ text: t('notesPane.expand'), side: 'right' }" class="btn-icon np-collapse" @click="togglePane">
-        <Icon name="chevron-right" :size="15" />
+      <button
+        class="np-search-btn"
+        v-tip="{ text: t('common.search'), side: ui.notesCollapsed ? 'right' : 'top' }"
+        @click="ui.searchOpen = true"
+      >
+        <Icon name="search" :size="15" />
+      </button>
+      <button class="btn-icon np-collapse" @click="togglePane">
+        <Icon :name="ui.notesCollapsed ? 'chevron-right' : 'chevron-left'" :size="15" />
       </button>
     </footer>
 
@@ -392,23 +385,24 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--panel) 45%, var(--bg));
   border-right: 1px solid var(--line);
   padding: 0.9rem 0.85rem 0.85rem;
-  gap: 0.75rem;
-  transition: width 0.3s var(--spring);
+  gap: 0.45rem;
+  transition: width 0.3s var(--spring), padding 0.3s var(--spring);
   overflow: hidden;
 }
+/* 折叠宽度与一级侧栏一致（64px），底部按钮列才能水平对齐 */
 .notes-pane.collapsed {
-  width: 56px;
+  width: 64px;
   padding: 0.9rem 0.5rem 0.85rem;
 }
 
 /* ---------- 顶部行：当前笔记本标题 + 新建 ---------- */
 .np-head {
   flex: none;
+  height: 2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding-bottom: 0.15rem;
 }
 .np-head-title {
   display: flex;
@@ -455,11 +449,6 @@ onBeforeUnmount(() => {
   height: 1px;
   background: var(--line);
   margin: 0.2rem 0;
-}
-.np-rail-count {
-  font-size: 0.68rem;
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- 列表区 ---------- */
@@ -537,30 +526,46 @@ onBeforeUnmount(() => {
   padding-top: 0.5rem;
 }
 
-/* ---------- 底部工具行 ---------- */
+/* ---------- 底部工具行：与一级侧栏底部同款（条目式图标 + 折叠按钮） ---------- */
 .np-foot {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   border-top: 1px solid var(--line);
-  padding-top: 0.6rem;
+  padding-top: 0.45rem;
 }
-.np-search-input {
+.np-search-btn {
   flex: 1;
   min-width: 0;
-  height: 2.1rem;
-  font-size: 0.8rem;
-  padding: 0 0.7rem;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.2rem;
+  padding: 0 0.5rem;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
-.np-foot .btn-icon {
-  width: 2.1rem;
-  height: 2.1rem;
+.np-search-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.np-collapse {
+  width: 1.9rem;
+  height: 1.9rem;
   flex: none;
 }
+/* 折叠时底部与一级侧栏同构：两枚按钮纵向堆叠、居中 */
 .notes-pane.collapsed .np-foot {
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.notes-pane.collapsed .np-search-btn {
+  flex: none;
+  width: 100%;
   justify-content: center;
+  padding: 0;
 }
 
 /* ---------- 多选浮层：纵向操作菜单，锚定在最顶部选中条目的右侧 ---------- */

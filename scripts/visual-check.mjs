@@ -141,14 +141,23 @@ await page.keyboard.press('Escape')
 await pause(300)
 check('Esc 退出全屏预览', (await page.locator('.preview.fullscreen').count()) === 0)
 
-console.log('▶ 预览 → 编辑')
+console.log('▶ 预览 → 编辑（局部页面）')
 await page.click('.pv-edit')
 await page.waitForSelector('.ed-sheet')
 await pause(600)
 {
   const b = await box('.ed-sheet')
-  const [vw] = await vp()
-  check('编辑器纸页居中且宽度受限', b.w <= 830 && Math.abs(b.x + b.w / 2 - vw / 2) < 14, JSON.stringify(b))
+  const pane = await box('.editor-page')
+  check(
+    '编辑器纸页在编辑区内居中且宽度受限 ≤760px',
+    pane !== null && b.w <= 760 && Math.abs(b.x + b.w / 2 - (pane.x + pane.w / 2)) < 8,
+    JSON.stringify(b)
+  )
+}
+{
+  const sidebar = await box('.sidebar')
+  const notesPane = await box('.notes-pane')
+  check('编辑时两级侧栏保持可见', sidebar !== null && notesPane !== null && sidebar.w === 124 && notesPane.w === 306)
 }
 check('工具栏胶囊形', (await css('.ed-toolbar', 'border-radius')) === '999px', await css('.ed-toolbar', 'border-radius'))
 {
@@ -163,6 +172,19 @@ check('工具栏胶囊形', (await css('.ed-toolbar', 'border-radius')) === '999
   const font = await css('.tiptap', 'font-family')
   check('正文使用内容字体变量', font.includes('Songti') || font.includes('serif'), font)
 }
+
+console.log('▶ 全屏编辑')
+await page.click('.ed-full')
+await page.waitForSelector('.editor-page.fullscreen')
+await pause(400)
+{
+  const b = await box('.editor-page.fullscreen')
+  const [vw] = await vp()
+  check('全屏编辑器铺满工作区', Math.abs(b.w - vw) < 3 && b.x === 0, JSON.stringify(b))
+}
+await page.keyboard.press('Escape')
+await pause(300)
+check('Esc 退出全屏编辑器', (await page.locator('.editor-page.fullscreen').count()) === 0)
 
 console.log('▶ 暗黑主题')
 await page.click('.ed-back')

@@ -50,7 +50,6 @@ export default {
   sidebar: {
     collapse: '折叠侧栏',
     expand: '展开侧栏',
-    search: '搜索笔记…',
     newNote: '新建笔记',
     notebooks: '笔记本',
     newNotebook: '新建笔记本',
@@ -58,11 +57,6 @@ export default {
     settings: '设置',
     deleteTitle: '删除笔记本',
     deleteDesc: '「{name}」中的笔记不会被删除，将移入「全部」。此操作不可恢复。'
-  },
-  notesPane: {
-    collapse: '收起笔记列表',
-    expand: '展开笔记列表',
-    searchPlaceholder: 'ctrl k 可快捷搜索'
   },
   preview: {
     seal: '阅',
@@ -77,7 +71,10 @@ export default {
     delete: '删除笔记',
     movePlaceholder: '选择目标笔记本',
     created: '创建于 {date}',
-    noContent: '这篇笔记还没有内容，点击右上角「编辑」开始书写'
+    noContent: '这篇笔记还没有内容，点击右上角「编辑」开始书写',
+    copy: '复制',
+    selectAll: '全选',
+    copied: '已复制'
   },
   home: {
     emptyTitle: '还没有笔记',
@@ -114,6 +111,8 @@ export default {
     words: '{n} 字',
     aiPolish: 'AI润色',
     aiConfig: 'AI配置',
+    fullscreen: '全屏编辑',
+    exitFullscreen: '退出全屏',
     imageTooBig: '图片超过 10M，无法插入',
     imageCompressed: '图片较大（{from}），已自动压缩到 {to}',
     imageAdded: '图片已插入',

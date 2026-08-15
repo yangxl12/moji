@@ -51,7 +51,6 @@ export default {
   sidebar: {
     collapse: 'Collapse sidebar',
     expand: 'Expand sidebar',
-    search: 'Search notes…',
     newNote: 'New note',
     notebooks: 'Notebooks',
     newNotebook: 'New notebook',
@@ -59,11 +58,6 @@ export default {
     settings: 'Settings',
     deleteTitle: 'Delete notebook',
     deleteDesc: 'Notes inside “{name}” will not be deleted — they will move to “All”. This cannot be undone.'
-  },
-  notesPane: {
-    collapse: 'Collapse note list',
-    expand: 'Expand note list',
-    searchPlaceholder: 'ctrl k to search'
   },
   preview: {
     seal: 'R',
@@ -78,7 +72,10 @@ export default {
     delete: 'Delete note',
     movePlaceholder: 'Choose a notebook',
     created: 'Created {date}',
-    noContent: 'This note is empty — click “Edit” to start writing'
+    noContent: 'This note is empty — click “Edit” to start writing',
+    copy: 'Copy',
+    selectAll: 'Select all',
+    copied: 'Copied'
   },
   home: {
     emptyTitle: 'No notes yet',
@@ -115,6 +112,8 @@ export default {
     words: '{n} words',
     aiPolish: 'AI Polish',
     aiConfig: 'AI Settings',
+    fullscreen: 'Fullscreen editing',
+    exitFullscreen: 'Exit fullscreen',
     imageTooBig: 'Image exceeds 10MB and cannot be inserted',
     imageCompressed: 'Large image ({from}) auto-compressed to {to}',
     imageAdded: 'Image inserted',

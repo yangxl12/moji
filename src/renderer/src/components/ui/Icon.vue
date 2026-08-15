@@ -77,6 +77,10 @@ const ICONS: Record<string, El[]> = {
     { kind: 'path', d: 'M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2' },
     { kind: 'path', d: 'M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6' }
   ],
+  copy: [
+    { kind: 'path', d: 'M9 9h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z' },
+    { kind: 'path', d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }
+  ],
   move: [
     { kind: 'path', d: 'M5 9l-3 3 3 3' },
     { kind: 'path', d: 'M9 5l3-3 3 3' },

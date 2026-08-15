@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import Icon from '@/components/ui/Icon.vue'
 import { useNotesStore } from '@/stores/notes'
 import { useNotebooksStore } from '@/stores/notebooks'
@@ -11,7 +10,6 @@ import { countWords } from '@/utils/text'
 import { timeAgo, formatDate } from '@/utils/format'
 
 const { t, locale } = useI18n()
-const router = useRouter()
 const notes = useNotesStore()
 const notebooks = useNotebooksStore()
 const ui = useUiStore()
@@ -71,7 +69,7 @@ async function removeNote(): Promise<void> {
 
 function edit(): void {
   if (!activeNote.value) return
-  router.push(`/note/${activeNote.value.id}`)
+  ui.editingNoteId = activeNote.value.id
 }
 
 function toggleFullscreen(): void {
@@ -87,24 +85,142 @@ function onContentClick(e: MouseEvent): void {
   if (/^https?:\/\//i.test(href)) window.open(href, '_blank')
 }
 
-// 移动弹窗的 Esc 关闭
-function onEsc(e: KeyboardEvent): void {
-  if (e.key === 'Escape' && moveOpen.value) moveOpen.value = false
+// ---------- 文本选择与右键菜单 ----------
+const contentEl = ref<HTMLElement | null>(null)
+const ctxEl = ref<HTMLElement | null>(null)
+const ctx = ref<{ x: number; y: number; text: string; hasSel: boolean } | null>(null)
+
+const CTX_W = 172
+
+/** 右键：选中内容上 → 复制 + 全选；预览页其它位置 → 仅全选 */
+function onContextMenu(e: MouseEvent): void {
+  const content = contentEl.value
+  if (!activeNote.value || !content) return
+  e.preventDefault()
+  closeCtx()
+  const sel = window.getSelection()
+  const hasSel =
+    !!sel &&
+    !sel.isCollapsed &&
+    sel.rangeCount > 0 &&
+    !!sel.anchorNode &&
+    content.contains(sel.anchorNode) &&
+    !!sel.focusNode &&
+    content.contains(sel.focusNode)
+  let onSelection = false
+  if (hasSel && sel) {
+    const rects = Array.from(sel.getRangeAt(0).getClientRects())
+    for (const r of rects) {
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        onSelection = true
+        break
+      }
+    }
+  }
+  const text = hasSel ? sel!.toString() : ''
+  // 估算菜单高度以钳制在视口内：每项约 36px + 内边距 12px
+  const estH = (onSelection ? 2 : 1) * 36 + 12
+  ctx.value = {
+    x: Math.max(8, Math.min(e.clientX, window.innerWidth - CTX_W - 8)),
+    y: Math.max(8, Math.min(e.clientY, window.innerHeight - estH - 8)),
+    text,
+    hasSel: onSelection
+  }
 }
-onMounted(() => document.addEventListener('keydown', onEsc))
-onBeforeUnmount(() => document.removeEventListener('keydown', onEsc))
+
+function closeCtx(): void {
+  ctx.value = null
+}
+
+/** 单击预览正文以外的区域：取消文本选中 */
+function onPaneMousedown(e: MouseEvent): void {
+  if (ctxEl.value?.contains(e.target as Node)) return
+  const content = contentEl.value
+  if (!content || !content.contains(e.target as Node)) {
+    window.getSelection()?.removeAllRanges()
+  }
+}
+
+function onDocMousedown(e: MouseEvent): void {
+  if (!ctx.value) return
+  if (ctxEl.value?.contains(e.target as Node)) return
+  closeCtx()
+}
+
+function fallbackCopyText(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    ta.remove()
+    return ok
+  } catch {
+    return false
+  }
+}
+
+async function ctxCopy(): Promise<void> {
+  const text = ctx.value?.text ?? ''
+  closeCtx()
+  if (!text) return
+  let ok = false
+  try {
+    await navigator.clipboard.writeText(text)
+    ok = true
+  } catch {
+    ok = fallbackCopyText(text)
+  }
+  if (ok) ui.toast('success', t('preview.copied'))
+}
+
+function ctxSelectAll(): void {
+  closeCtx()
+  const content = contentEl.value
+  if (!content) return
+  const range = document.createRange()
+  range.selectNodeContents(content)
+  const sel = window.getSelection()
+  sel?.removeAllRanges()
+  sel?.addRange(range)
+}
+
+// 移动弹窗的 Esc 关闭；右键菜单同样随 Esc 关闭
+function onEsc(e: KeyboardEvent): void {
+  if (e.key === 'Escape') {
+    if (moveOpen.value) moveOpen.value = false
+    closeCtx()
+  }
+}
+onMounted(() => {
+  document.addEventListener('keydown', onEsc)
+  document.addEventListener('mousedown', onDocMousedown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onEsc)
+  document.removeEventListener('mousedown', onDocMousedown)
+})
 
 // 切换笔记时回到纸页顶部
 watch(
   () => activeNote.value?.id,
   () => {
+    closeCtx()
     if (scrollEl.value) scrollEl.value.scrollTop = 0
   }
 )
 </script>
 
 <template>
-  <section class="preview" :class="{ fullscreen: ui.fullscreenPreview }">
+  <section
+    class="preview"
+    :class="{ fullscreen: ui.fullscreenPreview }"
+    @contextmenu="onContextMenu"
+    @mousedown="onPaneMousedown"
+  >
     <!-- ---------- 有笔记：预览 ---------- -->
     <template v-if="activeNote">
       <header class="pv-head">
@@ -128,7 +244,7 @@ watch(
         </div>
       </header>
 
-      <div ref="scrollEl" class="pv-scroll">
+      <div ref="scrollEl" class="pv-scroll" @scroll="closeCtx">
         <Transition name="pv-fade" mode="out-in">
           <article :key="activeNote.id" class="pv-sheet">
             <h1 class="pv-title">{{ title }}</h1>
@@ -136,7 +252,7 @@ watch(
             <hr class="pv-rule" />
 
             <div class="pv-body">
-              <div v-if="html" class="tiptap pv-content" v-html="html" @click="onContentClick" />
+              <div v-if="html" ref="contentEl" class="tiptap pv-content" v-html="html" @click="onContentClick" />
               <p v-else class="pv-nocontent">{{ t('preview.noContent') }}</p>
             </div>
 
@@ -178,6 +294,27 @@ watch(
         <span class="pv-empty-hint">{{ t('preview.emptyHintEdit') }}</span>
       </div>
     </div>
+
+    <!-- ---------- 右键菜单：复制 / 全选 ---------- -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="ctx"
+          ref="ctxEl"
+          class="menu pv-ctx"
+          :style="{ left: `${ctx.x}px`, top: `${ctx.y}px` }"
+        >
+          <button v-if="ctx.hasSel" class="menu-item" @mousedown.prevent @click="ctxCopy">
+            <Icon name="copy" :size="14" />
+            {{ t('preview.copy') }}
+          </button>
+          <button class="menu-item" @mousedown.prevent @click="ctxSelectAll">
+            <Icon name="listCheck" :size="14" />
+            {{ t('preview.selectAll') }}
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- ---------- 移动笔记弹窗 ---------- -->
     <Teleport to="body">
@@ -369,6 +506,14 @@ watch(
 .pv-move-modal {
   width: min(380px, calc(100vw - 48px));
 }
+
+/* ---------- 右键菜单 ---------- */
+.pv-ctx {
+  position: fixed;
+  z-index: 90;
+  min-width: 160px;
+}
+
 .pv-move-select {
   margin-top: 0.9rem;
   cursor: pointer;

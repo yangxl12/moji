@@ -32,6 +32,10 @@ export const useUiStore = defineStore('ui', {
     selectedNoteId: null as string | null,
     /** 预览是否全屏 */
     fullscreenPreview: false,
+    /** 正在编辑的笔记 id：非空时主页主区以局部页面显示编辑器（替代预览） */
+    editingNoteId: null as string | null,
+    /** 编辑器是否全屏 */
+    fullscreenEditor: false,
     /** 全局快捷键 / 托盘触发的"新建笔记本"请求计数，Sidebar 监听后弹出输入框 */
     notebookCreateReq: 0
   }),
@@ -44,9 +48,13 @@ export const useUiStore = defineStore('ui', {
       this.notesCollapsed = !this.notesCollapsed
       localStorage.setItem(NOTES_PANE_KEY, this.notesCollapsed ? '1' : '0')
     },
-    /** 切换预览目标（全屏阅读中切换笔记时保持全屏） */
+    /** 切换预览目标（全屏阅读中切换笔记时保持全屏）；切到别的笔记时顺带关闭正在编辑的笔记 */
     selectNote(id: string | null): void {
       this.selectedNoteId = id
+      if (id !== this.editingNoteId) {
+        this.editingNoteId = null
+        this.fullscreenEditor = false
+      }
     },
     requestNewNotebook(): void {
       this.notebookCreateReq++

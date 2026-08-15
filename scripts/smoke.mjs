@@ -83,6 +83,9 @@ await step('新建笔记本', async () => {
 await step('新建笔记并写入内容', async () => {
   await page.click('.sb-new')
   await page.waitForSelector('.tiptap')
+  if ((await page.locator('.sidebar').count()) !== 1) return fail('编辑时一级侧栏不可见')
+  if ((await page.locator('.notes-pane').count()) !== 1) return fail('编辑时二级侧栏不可见')
+  ok('编辑器以局部页面打开，两级侧栏保持可见')
   await page.fill('.ed-title', '测试笔记')
   await page.click('.tiptap')
   await page.keyboard.type('今天天气不错，适合写代码。\n\n这是第二段，用于测试 AI 润色功能。')
@@ -130,10 +133,69 @@ await step('返回后自动预览 + 全屏预览', async () => {
   ok('Esc 退出全屏预览')
 })
 
-await step('点击「编辑」进入编辑模式', async () => {
+await step('预览右键菜单：复制 / 全选', async () => {
+  await page.waitForSelector('.pv-content')
+  // 模拟按住鼠标选中全文
+  await page.evaluate(() => {
+    const el = document.querySelector('.pv-content')
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    const sel = window.getSelection()
+    sel.removeAllRanges()
+    sel.addRange(range)
+  })
+  // 取选中范围首个矩形内的一个点右键（元素中心可能落在段间距上，不在高亮内）
+  const pt = await page.evaluate(() => {
+    const sel = window.getSelection()
+    const r = sel.getRangeAt(0).getClientRects()[0]
+    return { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 6) }
+  })
+  await page.mouse.click(pt.x, pt.y, { button: 'right' })
+  await page.waitForSelector('.pv-ctx')
+  const selItems = await page.locator('.pv-ctx .menu-item').allTextContents()
+  if (!selItems.some((x) => x.includes('复制'))) return fail('选中右键菜单缺少「复制」: ' + selItems.join('/'))
+  if (!selItems.some((x) => x.includes('全选'))) return fail('选中右键菜单缺少「全选」: ' + selItems.join('/'))
+  ok('选中内容右键出现「复制 / 全选」菜单')
+  await shot(page, '04-context-menu')
+  await page.click('.pv-ctx .menu-item:has-text("复制")')
+  await page.waitForSelector('.toast:has-text("已复制")')
+  ok('「复制」写入剪贴板并提示')
+  // 直接在预览页空白处右键：仅「全选」
+  await page.click('.pv-head', { button: 'right' })
+  await page.waitForSelector('.pv-ctx')
+  const plainItems = await page.locator('.pv-ctx .menu-item').count()
+  if (plainItems !== 1) return fail('空白处右键应仅显示「全选」: ' + plainItems)
+  ok('空白处右键仅显示「全选」')
+  await page.click('.pv-ctx .menu-item')
+  // 选中后单击内容外部 → 取消选中
+  const selAfter = await page.evaluate(() => {
+    const sel = window.getSelection()
+    return sel ? sel.toString().length : -1
+  })
+  if (selAfter <= 0) return fail('「全选」后无选中内容')
+  await page.click('.pv-head')
+  const cleared = await page.evaluate(() => {
+    const sel = window.getSelection()
+    return !sel || sel.isCollapsed
+  })
+  if (!cleared) return fail('单击内容外部未取消选中')
+  ok('单击内容外部取消选中')
+})
+
+await step('点击「编辑」进入编辑模式（局部页面 + 全屏）', async () => {
   await page.click('.pv-edit')
   await page.waitForSelector('.tiptap')
-  ok('预览右上角「编辑」按钮进入编辑模式')
+  if ((await page.locator('.sidebar').count()) !== 1) return fail('编辑时一级侧栏不可见')
+  if ((await page.locator('.notes-pane').count()) !== 1) return fail('编辑时二级侧栏不可见')
+  ok('预览右上角「编辑」按钮进入编辑模式（两侧侧栏保持可见）')
+  await page.click('.ed-full')
+  await page.waitForSelector('.editor-page.fullscreen')
+  ok('编辑器全屏已开启')
+  await shot(page, '04-editor-fullscreen')
+  await page.keyboard.press('Escape')
+  await pause(300)
+  if ((await page.locator('.editor-page.fullscreen').count()) !== 0) return fail('Esc 未退出编辑器全屏')
+  ok('Esc 退出编辑器全屏')
   await page.click('.ed-back')
   await page.waitForSelector('.pv-sheet')
   ok('编辑返回后仍停留在预览')
@@ -205,6 +267,17 @@ await step('批量移动笔记到「全部」', async () => {
   await page.click('.sb-item:has-text("全部")')
   await page.waitForSelector('.note-card')
   ok('批量移动完成，笔记出现在「全部」')
+})
+
+await step('多选浮层点击外部关闭', async () => {
+  const card = page.locator('.note-card').first()
+  await card.hover()
+  await card.locator('.note-check').click()
+  await page.waitForSelector('.batch-bar')
+  await page.click('.preview')
+  await pause(300)
+  if ((await page.locator('.batch-bar').count()) !== 0) return fail('点击外部未关闭多选浮层')
+  ok('单击笔记列表以外区域关闭多选浮层')
 })
 
 await step('删除笔记（确认弹窗）', async () => {
