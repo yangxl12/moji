@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import * as storage from './storage'
 import * as ai from './ai'
+import { exportNotebook } from './export'
 import { setTrayMenuLabels, type TrayMenuLabels } from './tray'
 import type { AiConfig, AiPolishInput, Settings } from '@shared/types'
 
@@ -43,6 +44,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle('notebooks:create', (_e, name: string) => storage.createNotebook(name))
   ipcMain.handle('notebooks:rename', (_e, id: string, name: string) => storage.renameNotebook(id, name))
   ipcMain.handle('notebooks:delete', (_e, id: string) => storage.deleteNotebook(id))
+  ipcMain.handle('notebooks:export', (_e, notebookId: string | null) => exportNotebook(notebookId))
 
   // ---------- 笔记 ----------
   ipcMain.handle('notes:list', () => storage.listNotes())

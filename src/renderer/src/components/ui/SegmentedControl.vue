@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 interface SegOption {
   value: string
@@ -12,6 +12,12 @@ const model = defineModel<string>({ required: true })
 
 const root = ref<HTMLElement | null>(null)
 const thumbStyle = ref<{ left: string; width: string }>({ left: '3px', width: '0px' })
+/**
+ * 首次布局完成前关闭滑块过渡：挂载瞬间直接落到目标位置，
+ * 避免每次重挂载（切换笔记）滑块都从 0 宽度「弹出」造成抖动。
+ */
+const ready = ref(false)
+let readyRaf = 0
 
 function layout(): void {
   const el = root.value
@@ -29,7 +35,16 @@ function layout(): void {
 
 onMounted(() => {
   layout()
+  // 首帧之后再放行过渡动画（此时滑块已按最终位置渲染）
+  readyRaf = requestAnimationFrame(() => {
+    ready.value = true
+  })
   window.addEventListener('resize', layout)
+})
+
+onBeforeUnmount(() => {
+  cancelAnimationFrame(readyRaf)
+  window.removeEventListener('resize', layout)
 })
 
 watch(model, () => {
@@ -39,7 +54,7 @@ watch(model, () => {
 
 <template>
   <div ref="root" class="seg">
-    <div class="seg-thumb" :style="thumbStyle" />
+    <div class="seg-thumb" :class="{ ready }" :style="thumbStyle" />
     <button
       v-for="opt in options"
       :key="opt.value"

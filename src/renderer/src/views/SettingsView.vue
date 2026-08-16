@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { useAppStore } from '@/stores/app'
 import { cleanIpcError } from '@/utils/ipc'
+import type { NoteFormat } from '@shared/types'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -112,6 +113,10 @@ const langOptions = computed(() => [
   { value: 'zh-CN', label: '中文' },
   { value: 'en-US', label: 'English' }
 ])
+const defaultFormatOptions = computed(() => [
+  { value: 'richtext', label: t('editor.richText') },
+  { value: 'markdown', label: t('editor.markdown') }
+])
 </script>
 
 <template>
@@ -199,6 +204,24 @@ const langOptions = computed(() => [
             </Transition>
             <div class="st-preview" :style="{ fontFamily: settings.settings.contentFont }">
               {{ t('settings.fontPreview') }} · {{ t('settings.fontPreviewText') }}
+            </div>
+          </div>
+        </section>
+
+        <!-- 编辑 -->
+        <section class="st-section">
+          <h2 class="st-section-title">{{ t('settings.editing') }}</h2>
+          <div class="st-card">
+            <div class="st-row">
+              <div class="st-row-left">
+                <p class="st-label">{{ t('settings.defaultFormat') }}</p>
+                <p class="st-desc">{{ t('settings.defaultFormatDesc') }}</p>
+              </div>
+              <SegmentedControl
+                :model-value="settings.settings.defaultFormat"
+                :options="defaultFormatOptions"
+                @update:model-value="(v) => settings.update({ defaultFormat: v as NoteFormat })"
+              />
             </div>
           </div>
         </section>

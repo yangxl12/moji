@@ -119,7 +119,7 @@ check('条目入场动画生效', (await css('.note-card', 'animation-name')) ==
 }
 {
   const sheet = await box('.ed-sheet')
-  check('笔记纸页宽度受限 ≤760px', sheet.w <= 760, JSON.stringify(sheet))
+  check('笔记纸页宽度受限 ≤900px（md 与富文本统一）', sheet.w <= 900, JSON.stringify(sheet))
 }
 check('笔记纸页使用纸面底色', (await css('.ed-sheet', 'background-color')) === 'rgb(251, 247, 236)', await css('.ed-sheet', 'background-color'))
 
@@ -147,8 +147,8 @@ await pause(600)
   const b = await box('.ed-sheet')
   const pane = await box('.editor-page')
   check(
-    '编辑器纸页在编辑区内居中且宽度受限 ≤760px',
-    pane !== null && b.w <= 760 && Math.abs(b.x + b.w / 2 - (pane.x + pane.w / 2)) < 8,
+    '编辑器纸页在编辑区内居中且宽度受限 ≤900px',
+    pane !== null && b.w <= 900 && Math.abs(b.x + b.w / 2 - (pane.x + pane.w / 2)) < 8,
     JSON.stringify(b)
   )
 }

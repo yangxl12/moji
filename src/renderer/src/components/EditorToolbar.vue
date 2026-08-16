@@ -209,8 +209,15 @@ const groups = computed<Btn[][]>(() => {
   box-shadow: var(--shadow-1);
   width: max-content;
   max-width: 100%;
-  flex-wrap: wrap;
-  animation: fade-up 0.35s var(--ease-out);
+  min-width: 0;
+  /* 与 md 视图切换胶囊严格等高（3rem），不换行：窄窗口横向滚动而非增高 */
+  height: 3rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ed-toolbar::-webkit-scrollbar {
+  display: none;
 }
 .ed-tb-group {
   display: flex;

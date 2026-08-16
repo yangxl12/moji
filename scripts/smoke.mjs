@@ -235,6 +235,35 @@ await step('批量移动笔记到「全部」', async () => {
   ok('批量移动完成，笔记出现在「全部」')
 })
 
+await step('右键导出笔记本为 ZIP', async () => {
+  // 「全部」右键 → 导出：1 篇笔记 → zip 落在数据目录根
+  await page.click('.sb-item:has-text("全部")', { button: 'right' })
+  await page.waitForSelector('.nb-ctx-menu')
+  await shot(page, '05-export-menu')
+  await page.click('.nb-ctx-menu .ctx-item')
+  await page.waitForSelector('.toast')
+  const okToast = await page.locator('.toast').last().textContent()
+  if (!okToast.includes('已导出 1 篇笔记')) return fail('导出成功提示异常: ' + okToast)
+  const zips = readdirSync(storage).filter((f) => f.endsWith('.zip'))
+  if (zips.length !== 1) return fail('导出后存储根目录应有 1 个 zip，实际 ' + zips.length)
+  if (!zips[0].includes('墨记导出-全部-')) return fail('zip 命名异常: ' + zips[0])
+  const zipBuf = readFileSync(join(storage, zips[0]))
+  if (zipBuf.readUInt32LE(0) !== 0x04034b50) return fail('zip 本地文件头签名异常')
+  if (!zipBuf.includes(Buffer.from('全部/notes/', 'utf-8'))) return fail('zip 内缺少「全部/notes/」目录')
+  ok('「全部」导出成功: ' + zips[0])
+  // 空笔记本（生活）导出：无笔记 → 提示且不生成新 zip
+  await page.click('.sb-item:has-text("生活")', { button: 'right' })
+  await page.waitForSelector('.nb-ctx-menu')
+  await page.click('.nb-ctx-menu .ctx-item')
+  await page.waitForSelector('.toast')
+  const emptyToast = await page.locator('.toast').last().textContent()
+  if (!emptyToast.includes('没有可导出的笔记')) return fail('空笔记本提示异常: ' + emptyToast)
+  await pause(500)
+  const zips2 = readdirSync(storage).filter((f) => f.endsWith('.zip'))
+  if (zips2.length !== 1) return fail('空笔记本不应生成新 zip，实际 ' + zips2.length)
+  ok('空笔记本导出给出提示且不生成文件')
+})
+
 await step('多选浮层点击外部关闭', async () => {
   const card = page.locator('.note-card').first()
   await card.hover()

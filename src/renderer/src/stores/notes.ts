@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type { NoteMeta } from '@shared/types'
 import { useNotebooksStore } from './notebooks'
+import { useSettingsStore } from './settings'
 
 export const useNotesStore = defineStore('notes', {
   state: () => ({
@@ -18,7 +19,10 @@ export const useNotesStore = defineStore('notes', {
       useNotebooksStore().recount()
     },
     async create(notebookId: string | null): Promise<NoteMeta> {
-      const note = await window.api.createNote({ notebookId })
+      const note = await window.api.createNote({
+        notebookId,
+        format: useSettingsStore().settings.defaultFormat
+      })
       this.all.unshift(note)
       useNotebooksStore().recount()
       return note

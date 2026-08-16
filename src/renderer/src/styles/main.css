@@ -438,7 +438,14 @@ textarea.input {
   border-radius: calc(var(--r) - 3px);
   background: var(--surface);
   box-shadow: var(--shadow-1);
-  transition: left 0.24s var(--spring), width 0.24s var(--spring);
+  transition:
+    left 0.24s var(--spring),
+    width 0.24s var(--spring),
+    background-color 0.2s var(--ease);
+}
+/* 挂载首次落位时禁用过渡：滑块直接出现在目标位置，不抖动 */
+.seg-thumb:not(.ready) {
+  transition: none;
 }
 .seg-item {
   position: relative;
@@ -606,6 +613,53 @@ textarea.input {
   height: 1px;
   margin: 4px 6px;
   background: var(--line);
+}
+
+/* ---------- 右键菜单（编辑器正文 / 笔记本导出共用） ---------- */
+.ctx-menu {
+  position: fixed;
+  z-index: 320;
+  min-width: 136px;
+  padding: 0.4rem;
+  border-radius: var(--r);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2rem;
+  padding: 0 0.65rem;
+  border-radius: var(--r-sm);
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  text-align: left;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.ctx-item svg {
+  flex: none;
+}
+.ctx-item:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.ctx-pop-enter-active {
+  transition: opacity 0.13s var(--ease), transform 0.13s var(--ease-out);
+}
+.ctx-pop-leave-active {
+  transition: opacity 0.1s var(--ease);
+}
+.ctx-pop-enter-from {
+  opacity: 0;
+  transform: scale(0.96) translateY(-3px);
+}
+.ctx-pop-leave-to {
+  opacity: 0;
 }
 
 /* ---------- Toast ---------- */

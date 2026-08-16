@@ -14,9 +14,10 @@ import Icon from '@/components/ui/Icon.vue'
 import EditorToolbar from '@/components/EditorToolbar.vue'
 import AiPolishPanel from '@/components/AiPolishPanel.vue'
 import { useNotesStore } from '@/stores/notes'
+import { useSettingsStore } from '@/stores/settings'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import MarkdownEditor from '@/components/MarkdownEditor.vue'
-import type { NoteFormat } from '@shared/types'
+import type { MdViewMode, NoteFormat } from '@shared/types'
 import { markdownToText, renderMarkdownSafe, richTextDocToMarkdown } from '@/utils/markdown'
 import { useNotebooksStore } from '@/stores/notebooks'
 import { useUiStore } from '@/stores/ui'
@@ -36,22 +37,35 @@ const { t, locale } = useI18n()
 const notes = useNotesStore()
 const notebooks = useNotebooksStore()
 const ui = useUiStore()
+const settings = useSettingsStore()
 
 // 挂载时固化笔记 id（不能从 props 动态取：卸载落盘时组件即将销毁，props 仍可用，保持不变）
 const noteId = props.noteId
 
-const title = ref('')
-const loading = ref(true)
-const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
-const savedAt = ref<number | null>(null)
-const createdAt = ref(0)
+// 列表里的笔记带完整正文：setup 阶段同步备好标题 / 格式 / 正文，
+// 首帧即渲染最终内容，避免挂载后再填充造成的「先空后现」与切换抖动
+const initialNote = notes.get(noteId)
+const initialFormat: NoteFormat =
+  initialNote?.format === 'markdown' || initialNote?.format === 'richtext'
+    ? initialNote.format
+    : settings.settings.defaultFormat
+
+const title = ref(initialNote?.title ?? '')
+const loading = ref(!initialNote)
+const saveState = ref<'idle' | 'saving' | 'saved' | 'error'>(initialNote ? 'saved' : 'idle')
+const savedAt = ref<number | null>(initialNote?.updatedAt ?? null)
+const createdAt = ref(initialNote?.createdAt ?? 0)
 const wordCount = ref(0)
 const aiOpen = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
-const format = ref<NoteFormat>('richtext')
-const mdContent = ref('')
+const format = ref<NoteFormat>(initialFormat)
+const mdContent = ref(
+  initialNote && initialFormat === 'markdown' && typeof initialNote.content === 'string' ? initialNote.content : ''
+)
 const mdEditor = ref<InstanceType<typeof MarkdownEditor> | null>(null)
 const formatSwitching = ref(false)
+// 新建的笔记进入 Markdown 默认「编辑」，点击已有笔记默认「预览」
+const mdViewMode = ref<MdViewMode>(ui.selectedNoteOpenMode === 'new' ? 'edit' : 'preview')
 
 const isMarkdown = computed(() => format.value === 'markdown')
 const formatOptions = computed(() => [
@@ -62,6 +76,18 @@ const formatModel = computed({
   get: () => format.value,
   set: (value: string) => {
     if (value === 'richtext' || value === 'markdown') void switchFormat(value)
+  }
+})
+
+const mdViewModeOptions = computed(() => [
+  { value: 'preview', label: t('markdown.preview') },
+  { value: 'edit', label: t('markdown.edit') },
+  { value: 'split', label: t('markdown.split') }
+])
+const mdViewModeModel = computed({
+  get: () => mdViewMode.value,
+  set: (value: string) => {
+    if (value === 'preview' || value === 'edit' || value === 'split') mdViewMode.value = value
   }
 })
 
@@ -81,7 +107,9 @@ function replaceAiContent(text: string): void {
 
 // ---------- 正文右键菜单 ----------
 // 选中内容右键：复制 + 全选；未选中右键：仅全选
-const ctxMenu = ref<{ x: number; y: number; hasSelection: boolean } | null>(null)
+// origin 区分来源：富文本 / MD 源码面板 / MD 预览面板，全选与复制按来源路由
+type CtxOrigin = 'richtext' | 'md-source' | 'md-preview'
+const ctxMenu = ref<{ x: number; y: number; hasSelection: boolean; origin: CtxOrigin } | null>(null)
 const ctxMenuEl = ref<HTMLElement | null>(null)
 
 // ---------- 返回顶部 ----------
@@ -106,21 +134,42 @@ function closeCtxMenu(): void {
 }
 
 /** 打开自定义右键菜单：定位到光标处并钳制在视口内 */
-async function openEditorCtxMenu(view: EditorView, event: MouseEvent): Promise<void> {
-  event.preventDefault()
-  const { from, to } = view.state.selection
-  const hasSelection = from < to && view.state.doc.textBetween(from, to, ' ', ' ').length > 0
-  ctxMenu.value = { x: event.clientX, y: event.clientY, hasSelection }
+async function showCtxMenu(
+  x: number,
+  y: number,
+  hasSelection: boolean,
+  origin: CtxOrigin
+): Promise<void> {
+  ctxMenu.value = { x, y, hasSelection, origin }
   await nextTick()
   const el = ctxMenuEl.value
   if (!el || !ctxMenu.value) return
   const r = el.getBoundingClientRect()
   const margin = 8
   ctxMenu.value = {
-    x: Math.max(margin, Math.min(event.clientX, window.innerWidth - r.width - margin)),
-    y: Math.max(margin, Math.min(event.clientY, window.innerHeight - r.height - margin)),
-    hasSelection
+    x: Math.max(margin, Math.min(x, window.innerWidth - r.width - margin)),
+    y: Math.max(margin, Math.min(y, window.innerHeight - r.height - margin)),
+    hasSelection,
+    origin
   }
+}
+
+/** 富文本正文右键：根据 ProseMirror 选区判断是否已有选中文字 */
+async function openEditorCtxMenu(view: EditorView, event: MouseEvent): Promise<void> {
+  event.preventDefault()
+  const { from, to } = view.state.selection
+  const hasSelection = from < to && view.state.doc.textBetween(from, to, ' ', ' ').length > 0
+  await showCtxMenu(event.clientX, event.clientY, hasSelection, 'richtext')
+}
+
+/** Markdown 源码/预览面板右键：由 MarkdownEditor 上抛坐标与选区状态 */
+function onMdContextMenu(payload: { x: number; y: number; hasSelection: boolean; origin: 'source' | 'preview' }): void {
+  void showCtxMenu(payload.x, payload.y, payload.hasSelection, payload.origin === 'preview' ? 'md-preview' : 'md-source')
+}
+
+/** Markdown 面板 Ctrl+C 的弱提示 */
+function onMdCopyResult(ok: boolean): void {
+  ui.toast(ok ? 'success' : 'error', t(ok ? 'editor.copySuccess' : 'editor.copyFailed'))
 }
 
 /** 复制编辑器内选中的文本：优先 execCommand（保留富文本），失败回退剪贴板 API */
@@ -145,15 +194,56 @@ async function copySelectedText(): Promise<boolean> {
   return false
 }
 
+/** 复制 MD 源码面板选中的文本：直接取 CodeMirror 状态，剪贴板 API 优先 */
+async function copyMdSelectedText(): Promise<boolean> {
+  const text = mdEditor.value?.getSelectedText() ?? ''
+  if (!text) return false
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // 剪贴板 API 被拒绝时回退 DOM 选区复制（CodeMirror 的选区同样存在 DOM 中）
+  }
+  return copySelectedText()
+}
+
+/** 复制 MD 预览面板选中的文本：纯文本剪贴板 API，不触发 DOM copy 事件（预览面板自带 copy 提示，避免重复弹） */
+async function copyPlainSelectedText(): Promise<boolean> {
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed) return false
+  const text = sel.toString()
+  if (!text) return false
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // 剪贴板 API 被拒绝时视为失败
+  }
+  return false
+}
+
 async function copyFromCtxMenu(): Promise<void> {
-  const ok = await copySelectedText()
+  const origin = ctxMenu.value?.origin ?? 'richtext'
+  const ok =
+    origin === 'md-source'
+      ? await copyMdSelectedText()
+      : origin === 'md-preview'
+        ? await copyPlainSelectedText()
+        : await copySelectedText()
   closeCtxMenu()
   ui.toast(ok ? 'success' : 'error', t(ok ? 'editor.copySuccess' : 'editor.copyFailed'))
 }
 
 function selectAllContent(): void {
+  const origin = ctxMenu.value?.origin ?? 'richtext'
   closeCtxMenu()
-  editor.value?.chain().focus().selectAll().run()
+  if (origin === 'md-source') mdEditor.value?.selectAll()
+  else if (origin === 'md-preview') mdEditor.value?.selectAllPreview()
+  else editor.value?.chain().focus().selectAll().run()
 }
 
 function onDocMousedown(e: MouseEvent): void {
@@ -166,7 +256,13 @@ function onDocMousedown(e: MouseEvent): void {
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 const editor = useEditor({
-  content: { type: 'doc', content: [] },
+  // 富文本笔记：把已加载的正文直接作为编辑器初始内容。
+  // 编辑器实例在 onMounted 才创建，options 里的 content 是唯一能让首帧
+  // 就带上正文的入口（onMounted 里还有一次统一注入兜底异步补取的路径）。
+  content:
+    initialNote && initialFormat === 'richtext'
+      ? ((initialNote.content as never) ?? { type: 'doc', content: [] })
+      : { type: 'doc', content: [] },
   extensions: [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] }
@@ -219,6 +315,13 @@ const editor = useEditor({
   }
 })
 
+// 富文本正文无法在此注入：useEditor 直到组件 onMounted 才创建编辑器实例
+// （@tiptap/vue-3 的行为，setup 阶段 editor.value 为空），统一放到 onMounted 里注入。
+// 这里只预计算 Markdown 初始字数；富文本字数在正文注入后重算。
+if (initialNote && initialFormat === 'markdown') {
+  wordCount.value = countWords(markdownToText(mdContent.value))
+}
+
 /** 当前编辑器正文内容：富文本取 TipTap JSON，Markdown 取源码字符串 */
 function currentContent(): unknown {
   return isMarkdown.value ? mdContent.value : (editor.value?.getJSON() ?? null)
@@ -226,49 +329,38 @@ function currentContent(): unknown {
 
   // 上方重复声明已移除
 
-async function flushSave(): Promise<void> {
+async function flushSave(): Promise<boolean> {
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
   }
-  if (loading.value || (!isMarkdown.value && !editor.value)) return
+  if (loading.value || (!isMarkdown.value && !editor.value)) return true
   // 笔记已被删除（本页删除 / 批量删除后组件卸载落盘），无需再保存
-  if (!notes.get(noteId)) return
+  if (!notes.get(noteId)) return true
   try {
     saveState.value = 'saving'
     await window.api.updateNote(noteId, {
       title: title.value,
       content: currentContent(),
-        format: format.value
+      format: format.value
     })
     notes.syncLocal(noteId, { title: title.value, content: currentContent(), format: format.value })
     saveState.value = 'saved'
     savedAt.value = Date.now()
+    return true
   } catch {
     saveState.value = 'error'
+    return false
   }
-}
-
-function currentContentIsEmpty(): boolean {
-  if (isMarkdown.value) return mdContent.value.trim().length === 0
-  return editor.value?.isEmpty ?? true
 }
 
 async function switchFormat(target: NoteFormat): Promise<void> {
   if (formatSwitching.value || loading.value || target === format.value) return
   formatSwitching.value = true
   try {
-    await flushSave()
-      if (saveState.value === 'error') throw new Error('save failed')
+    // 先落盘旧格式内容，再直接转换切换，不弹确认窗口
+    if (!(await flushSave())) throw new Error('save failed')
     if (!notes.get(noteId)) return
-    if (!currentContentIsEmpty()) {
-      const ok = await ui.confirm({
-        title: t('editor.formatSwitchTitle'),
-        desc: t('editor.formatSwitchDesc'),
-        okText: t('common.confirm')
-      })
-      if (!ok) return
-    }
 
     if (target === 'markdown') {
       if (!notes.get(noteId)) return
@@ -280,12 +372,10 @@ async function switchFormat(target: NoteFormat): Promise<void> {
     }
 
     format.value = target
-    await flushSave()
-      if (saveState.value === 'error') throw new Error('save failed')
-    ui.toast('success', t('editor.formatSwitched'))
+    if (!(await flushSave())) throw new Error('save failed')
   } catch (e) {
-      ui.toast('error', `${t('editor.formatSwitchFailed')} · ${cleanIpcError(e)}`)
-    } finally {
+    ui.toast('error', `${t('editor.formatSwitchFailed')} · ${cleanIpcError(e)}`)
+  } finally {
     formatSwitching.value = false
   }
 }
@@ -421,30 +511,42 @@ function onEsc(e: KeyboardEvent): void {
 let unsubWindowHidden: (() => void) | null = null
 
 onMounted(async () => {
-  const note = notes.get(noteId) ?? (await window.api.getNote(noteId))
+  // 列表里已有该笔记时标题 / 格式 / Markdown 正文已在 setup 阶段备好；仅缺失时异步兜底补取
+  const note = initialNote ?? (await window.api.getNote(noteId))
   if (!note) {
     ui.toast('error', 'Note not found')
     ui.selectedNoteId = null
     return
   }
+  if (note !== initialNote) {
+    title.value = note.title
+    createdAt.value = note.createdAt
+    format.value =
+      note.format === 'markdown'
+        ? 'markdown'
+        : note.format === 'richtext'
+          ? 'richtext'
+          : settings.settings.defaultFormat
+    if (format.value === 'markdown') {
+      mdContent.value = typeof note.content === 'string' ? note.content : ''
+      wordCount.value = countWords(markdownToText(mdContent.value))
+    }
+  }
   // 主页主区直接展示这篇笔记
   ui.selectedNoteId = note.id
   ui.fullscreenEditor = false
-  title.value = note.title
-  createdAt.value = note.createdAt
-  format.value = note.format === 'markdown' ? 'markdown' : 'richtext'
-    if (format.value === 'markdown') {
-      mdContent.value = typeof note.content === 'string' ? note.content : ''
-    } else {
-      editor.value?.commands.setContent((note.content as never) ?? { type: 'doc', content: [] })
-    }
-    // Markdown 字数在下方统一切换后计算
-  wordCount.value = countWords(editor.value?.getJSON() ?? null)
-    if (format.value === 'markdown') wordCount.value = countWords(markdownToText(mdContent.value))
   loading.value = false
   saveState.value = 'saved'
   savedAt.value = note.updatedAt
   await nextTick()
+
+  // 富文本正文必须在此注入：编辑器实例（useEditor）在组件 onMounted 才创建，
+  // setup 阶段注入无效。放在 update 监听注册之前，注入不会误触发自动保存。
+  if (!isMarkdown.value) {
+    editor.value?.commands.setContent((note.content as never) ?? { type: 'doc', content: [] })
+    wordCount.value = countWords(editor.value?.getJSON() ?? null)
+  }
+
   onScroll()
 
   editor.value?.on('update', () => {
@@ -521,14 +623,28 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div v-if="!isMarkdown" class="ed-row2">
-        <EditorToolbar :editor="editor as unknown as Editor" @insert-image="pickImage" />
+      <div class="ed-row2">
+        <Transition name="ed-toolbar-swap">
+          <EditorToolbar
+            v-if="!isMarkdown"
+            key="richtext"
+            :editor="editor as unknown as Editor"
+            @insert-image="pickImage"
+          />
+          <SegmentedControl
+            v-else
+            key="markdown"
+            v-model="mdViewModeModel"
+            :options="mdViewModeOptions"
+            class="ed-md-view-switch"
+          />
+        </Transition>
       </div>
     </header>
 
     <!-- ---------- 纸页：标题在正文顶部，编辑即预览 ---------- -->
     <div ref="scrollEl" class="ed-scroll" @scroll="onScroll">
-      <div class="ed-sheet" :class="{ 'ed-sheet-md': isMarkdown }">
+      <div class="ed-sheet">
         <input
           v-model="title"
           class="ed-title"
@@ -538,16 +654,27 @@ onBeforeUnmount(() => {
           @keydown.enter.prevent="onFocusEditor"
         />
         <hr class="ed-rule" />
-        <EditorContent v-if="!isMarkdown" :editor="editor" class="ed-content" />
+        <Transition name="ed-format" mode="out-in">
+          <EditorContent
+            v-if="!isMarkdown"
+            key="richtext"
+            :editor="editor"
+            class="ed-content"
+          />
           <MarkdownEditor
             v-else
+            key="markdown"
             ref="mdEditor"
             v-model="mdContent"
+            :view-mode="mdViewMode"
             :placeholder="t('markdown.placeholder')"
             @update:model-value="onMarkdownInput"
             @image-files="onMarkdownImageFiles"
             @insert-image="pickImage"
+            @contextmenu="onMdContextMenu"
+            @copy-result="onMdCopyResult"
           />
+        </Transition>
 
         <!-- 元信息：保存状态 · 编辑/创建时间 · 字数，紧凑一行 -->
         <footer v-if="!loading" class="ed-meta">
@@ -681,9 +808,6 @@ onBeforeUnmount(() => {
     opacity: 1;
   }
 }
-.editor-page.fullscreen .ed-sheet {
-  max-width: 900px;
-}
 
 /* ---------- 顶部工具区：低存在感的单行图标 + 工具栏胶囊 ---------- */
 .ed-top {
@@ -692,6 +816,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+.ed-top :deep(.seg-item) {
+  transition:
+    color 0.2s var(--ease),
+    transform 0.18s var(--spring);
+}
+.ed-top :deep(.seg-item:active) {
+  transform: scale(0.96);
 }
 .ed-row1 {
   display: flex;
@@ -704,6 +836,12 @@ onBeforeUnmount(() => {
 .ed-format-switch {
   flex: none;
   margin: 0 0.6rem;
+}
+/* 两个格式项等宽：切换笔记时整个开关与滑块宽度保持恒定，滑块仅平移 */
+.ed-format-switch :deep(.seg-item) {
+  min-width: 5.6rem;
+  justify-content: center;
+  padding: 0 0.6rem;
 }
 .ed-sep {
   width: 1px;
@@ -724,9 +862,58 @@ onBeforeUnmount(() => {
   background: var(--danger-soft);
   color: var(--danger);
 }
+
+/* 富文本工具栏与 MD 视图切换固定在同一行：两个胶囊高度完全一致（3rem），
+   切换瞬间同格重叠交叉淡入，不留空白、不跳动 */
 .ed-row2 {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 3rem;
+  justify-items: center;
+  align-items: center;
+  min-width: 0;
+}
+/* 切换瞬间两个胶囊同格重叠：交叉淡入淡出，不留空白 */
+.ed-row2 > :deep(.ed-toolbar),
+.ed-row2 > .ed-md-view-switch {
+  grid-area: 1 / 1;
+}
+/* MD 视图切换直接作为胶囊本体（无外层包裹）：与工具栏胶囊同高 3rem、同风格 */
+.ed-md-view-switch {
+  height: 3rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-1);
+}
+/* 2.5rem 项 + 3px 内边距 + 1px 边框 = 恰好 3rem，与工具栏胶囊严格等高 */
+.ed-md-view-switch :deep(.seg-item) {
+  height: 2.5rem;
+  min-width: 4.2rem;
+  padding: 0 1rem;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
   justify-content: center;
+}
+.ed-md-view-switch :deep(.seg-thumb) {
+  border-radius: 999px;
+}
+.ed-md-view-switch :deep(.seg-item.active) {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* 工具栏 / 视图按钮行切换：仅交叉淡入淡出，无位移、无缩放 */
+.ed-toolbar-swap-enter-active {
+  transition: opacity 0.16s var(--ease);
+}
+.ed-toolbar-swap-leave-active {
+  transition: opacity 0.12s var(--ease);
+}
+.ed-toolbar-swap-enter-from,
+.ed-toolbar-swap-leave-to {
+  opacity: 0;
 }
 
 /* ---------- 滚动区与纸页 ---------- */
@@ -737,27 +924,15 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   padding: 0.9rem 1.8rem 2.6rem;
 }
+/* ---------- 纸页：md 与富文本宽度一致，切换格式时布局不动 ---------- */
 .ed-sheet {
-  max-width: 760px;
+  max-width: 900px;
   margin: 0 auto;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);
   padding: 2.2rem 2.9rem 2.4rem;
-  animation: fade-up 0.4s var(--ease-out);
-  transition: max-width 0.32s var(--ease-out);
-}
-.ed-sheet-md {
-  max-width: 1180px;
-}
-@media (max-width: 1240px) {
-  .ed-sheet-md {
-.editor-page.fullscreen .ed-sheet.ed-sheet-md {
-  max-width: 1180px;
-}
-    max-width: 100%;
-  }
 }
 
 /* ---------- 纸页内标题：位于正文区域顶部 ---------- */
@@ -817,6 +992,18 @@ onBeforeUnmount(() => {
   color: var(--danger);
 }
 
+/* ---------- 正文格式切换：仅快速淡入淡出，不位移、不模糊、不改变布局 ---------- */
+.ed-format-enter-active {
+  transition: opacity 0.12s var(--ease);
+}
+.ed-format-leave-active {
+  transition: opacity 0.08s var(--ease);
+}
+.ed-format-enter-from,
+.ed-format-leave-to {
+  opacity: 0;
+}
+
 /* ---------- 返回顶部 ---------- */
 .ed-top-btn {
   position: absolute;
@@ -860,53 +1047,6 @@ onBeforeUnmount(() => {
 
 .ed-file-input {
   display: none;
-}
-
-/* ---------- 正文右键菜单 ---------- */
-.ctx-menu {
-  position: fixed;
-  z-index: 320;
-  min-width: 136px;
-  padding: 0.4rem;
-  border-radius: var(--r);
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  box-shadow: var(--shadow-3);
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-.ctx-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 2rem;
-  padding: 0 0.65rem;
-  border-radius: var(--r-sm);
-  font-size: 0.82rem;
-  color: var(--ink-2);
-  text-align: left;
-  transition: background 0.12s var(--ease), color 0.12s var(--ease);
-}
-.ctx-item svg {
-  flex: none;
-}
-.ctx-item:hover {
-  background: var(--surface-2);
-  color: var(--ink);
-}
-.ctx-pop-enter-active {
-  transition: opacity 0.13s var(--ease), transform 0.13s var(--ease-out);
-}
-.ctx-pop-leave-active {
-  transition: opacity 0.1s var(--ease);
-}
-.ctx-pop-enter-from {
-  opacity: 0;
-  transform: scale(0.96) translateY(-3px);
-}
-.ctx-pop-leave-to {
-  opacity: 0;
 }
 
 /* ---------- 移动弹窗 ---------- */

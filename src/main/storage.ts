@@ -12,11 +12,13 @@ export const DEFAULT_SETTINGS: Settings = {
   contentFont: '"Source Han Serif SC","Noto Serif SC","Songti SC",Georgia,"Times New Roman",serif',
   uiFont: '"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei UI","Segoe UI",system-ui,sans-serif',
   language: 'zh-CN',
+  defaultFormat: 'richtext',
   ai: null
 }
 
 const NOTE_DIR = 'notes'
-const IMAGE_DIR = 'images'
+/** 导出打包时需要读取图片目录，故导出 */
+export const IMAGE_DIR = 'images'
 const SETTINGS_FILE = 'settings.json'
 const NOTEBOOKS_FILE = 'notebooks.json'
 
@@ -283,6 +285,9 @@ export async function loadSettings(): Promise<Settings> {
     return defaults
   }
   const merged: Settings = { ...defaults, ...raw }
+  if (merged.defaultFormat !== 'richtext' && merged.defaultFormat !== 'markdown') {
+    merged.defaultFormat = defaults.defaultFormat
+  }
   merged.ai = hydrateAi(raw.ai as StoredAi | null | undefined)
   return merged
 }

@@ -13,7 +13,7 @@ const ui = useUiStore()
 async function newNote(): Promise<void> {
   const notebookId = notebooks.activeId === 'all' ? null : notebooks.activeId
   const note = await notes.create(notebookId)
-  ui.selectNote(note.id)
+  ui.selectNote(note.id, 'new')
 }
 </script>
 

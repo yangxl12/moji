@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/ui/Icon.vue'
@@ -103,9 +103,76 @@ async function removeNotebook(id: string): Promise<void> {
 }
 
 function onNotebookMenu(key: string, id: string): void {
-  if (key === 'rename') void beginRename(id)
+  if (key === 'export') void exportNotebook(id)
+  else if (key === 'rename') void beginRename(id)
   else if (key === 'delete') void removeNotebook(id)
 }
+
+// ---------- 笔记本右键菜单（导出） ----------
+const ctx = ref<{ x: number; y: number; notebookId: string | null } | null>(null)
+const ctxEl = ref<HTMLElement | null>(null)
+
+function closeCtx(): void {
+  ctx.value = null
+}
+
+/** 打开右键菜单：定位到光标处并钳制在视口内（与编辑器右键菜单行为一致） */
+async function openCtx(e: MouseEvent, notebookId: string | null): Promise<void> {
+  ctx.value = { x: e.clientX, y: e.clientY, notebookId }
+  await nextTick()
+  const el = ctxEl.value
+  if (!el || !ctx.value) return
+  const r = el.getBoundingClientRect()
+  const margin = 8
+  ctx.value = {
+    x: Math.max(margin, Math.min(e.clientX, window.innerWidth - r.width - margin)),
+    y: Math.max(margin, Math.min(e.clientY, window.innerHeight - r.height - margin)),
+    notebookId
+  }
+}
+
+/** 导出当前右键目标笔记本（null 表示「全部」）：zip 落在数据目录根 */
+async function exportNotebook(id: string | null): Promise<void> {
+  closeCtx()
+  const res = await window.api.exportNotebook(id)
+  if (res.ok && res.file) {
+    const name = res.file.split(/[\\/]/).pop() ?? res.file
+    ui.toast('success', t('sidebar.exportSuccess', { n: res.count ?? 0, file: name }))
+  } else if (res.error === 'Empty') {
+    ui.toast('info', t('sidebar.exportEmpty'))
+  } else {
+    ui.toast('error', t('sidebar.exportFailed'))
+  }
+}
+
+function onCtxOutside(e: MouseEvent): void {
+  const target = e.target as Node | null
+  if (!target) return
+  if (ctxEl.value?.contains(target)) return
+  closeCtx()
+}
+function onCtxEsc(e: KeyboardEvent): void {
+  if (e.key === 'Escape') closeCtx()
+}
+function onCtxScroll(): void {
+  closeCtx()
+}
+function onCtxBlur(): void {
+  closeCtx()
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onCtxOutside)
+  document.addEventListener('keydown', onCtxEsc)
+  document.addEventListener('scroll', onCtxScroll, true)
+  window.addEventListener('blur', onCtxBlur)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onCtxOutside)
+  document.removeEventListener('keydown', onCtxEsc)
+  document.removeEventListener('scroll', onCtxScroll, true)
+  window.removeEventListener('blur', onCtxBlur)
+})
 </script>
 
 <template>
@@ -149,6 +216,7 @@ function onNotebookMenu(key: string, id: string): void {
             :class="{ active: notebooks.activeId === 'all' }"
             v-tip="{ text: collapsed ? t('common.all') : '', side: 'right' }"
             @click="notebooks.select('all')"
+            @contextmenu.prevent="openCtx($event, null)"
           >
             <span class="sb-item-icon"><Icon name="note" :size="15" /></span>
             <span class="sb-item-name" :aria-hidden="collapsed || undefined">{{ t('common.all') }}</span>
@@ -162,6 +230,7 @@ function onNotebookMenu(key: string, id: string): void {
             :style="{ animationDelay: `${i * 0.02}s` }"
             v-tip="{ text: (el: HTMLElement) => nbTip(el, nb.name), side: 'right' }"
             @click="notebooks.select(nb.id)"
+            @contextmenu.prevent="openCtx($event, nb.id)"
           >
             <template v-if="editingId === nb.id && !collapsed">
               <span class="sb-item-icon"><Icon name="book" :size="15" /></span>
@@ -181,6 +250,7 @@ function onNotebookMenu(key: string, id: string): void {
               <span v-if="!collapsed" class="sb-more" @click.stop>
                 <Dropdown
                   :entries="[
+                    { key: 'export', label: t('sidebar.exportNotebook'), icon: 'download' },
                     { key: 'rename', label: t('common.rename'), icon: 'pencil' },
                     { key: 'delete', label: t('common.delete'), icon: 'trash', danger: true }
                   ]"
@@ -207,6 +277,23 @@ function onNotebookMenu(key: string, id: string): void {
         <Icon :name="collapsed ? 'chevron-right' : 'chevron-left'" :size="15" />
       </button>
     </div>
+
+    <!-- ---------- 笔记本右键菜单：导出为 ZIP（「全部」同样支持） ---------- -->
+    <Teleport to="body">
+      <Transition name="ctx-pop">
+        <div
+          v-if="ctx"
+          ref="ctxEl"
+          class="ctx-menu nb-ctx-menu"
+          :style="{ left: `${ctx.x}px`, top: `${ctx.y}px` }"
+        >
+          <button class="ctx-item" @click="exportNotebook(ctx.notebookId)">
+            <Icon name="download" :size="15" />
+            <span>{{ t('sidebar.exportNotebook') }}</span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
   </aside>
 </template>
 

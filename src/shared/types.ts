@@ -6,6 +6,8 @@ export type Language = 'zh-CN' | 'en-US'
 export type AiStrength = 'gentle' | 'standard' | 'deep'
 /** 笔记正文格式：富文本 TipTap JSON / Markdown 源码字符串 */
 export type NoteFormat = 'richtext' | 'markdown'
+/** Markdown 预览页面展示模式 */
+export type MdViewMode = 'preview' | 'edit' | 'split'
 
 export interface AiConfig {
   /** OpenAI 兼容接口地址，例如 https://api.deepseek.com/v1 */
@@ -30,6 +32,8 @@ export interface Settings {
   contentFont: string
   uiFont?: string
   language: Language
+  /** 新建笔记时默认使用的正文格式 */
+  defaultFormat: NoteFormat
   ai: AiConfig | null
 }
 
@@ -126,6 +130,17 @@ export interface MigrateResult {
   error?: string
 }
 
+/** 笔记本导出为 ZIP 的结果 */
+export interface ExportResult {
+  ok: boolean
+  /** 生成的 zip 文件绝对路径（保存在数据目录根） */
+  file?: string
+  /** 导出的笔记篇数 */
+  count?: number
+  /** 失败原因；'Empty' 表示该笔记本（或「全部」）没有可导出的笔记 */
+  error?: string
+}
+
 /** 托盘右键菜单动作（主进程 → 渲染层） */
 export type TrayAction = 'new-note' | 'new-notebook' | 'settings'
 
@@ -155,6 +170,8 @@ export interface InkApi {
   createNotebook(name: string): Promise<Notebook>
   renameNotebook(id: string, name: string): Promise<Notebook>
   deleteNotebook(id: string): Promise<void>
+  /** 导出笔记本全部笔记（notebookId 为 null 表示「全部」）为 zip，保存到数据目录根 */
+  exportNotebook(notebookId: string | null): Promise<ExportResult>
 
   listNotes(): Promise<NoteMeta[]>
   getNote(id: string): Promise<NoteMeta | null>

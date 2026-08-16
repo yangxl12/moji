@@ -30,6 +30,8 @@ export const useUiStore = defineStore('ui', {
     notesCollapsed: localStorage.getItem(NOTES_PANE_KEY) === '1',
     /** 当前选中的笔记 id（列表点选 / 搜索命中后，主区直接显示可编辑的笔记页） */
     selectedNoteId: null as string | null,
+    /** 本次打开笔记的方式：新建或查看（决定 Markdown 默认展示编辑 / 预览） */
+    selectedNoteOpenMode: 'view' as 'new' | 'view',
     /** 编辑器是否全屏 */
     fullscreenEditor: false,
     /** 全局快捷键 / 托盘触发的"新建笔记本"请求计数，Sidebar 监听后弹出输入框 */
@@ -45,8 +47,9 @@ export const useUiStore = defineStore('ui', {
       localStorage.setItem(NOTES_PANE_KEY, this.notesCollapsed ? '1' : '0')
     },
     /** 切换笔记页目标（编辑即预览，切走时 EditorView 以 key 重挂载并自动落盘） */
-    selectNote(id: string | null): void {
+    selectNote(id: string | null, mode: 'new' | 'view' = 'view'): void {
       this.selectedNoteId = id
+      this.selectedNoteOpenMode = mode
       this.fullscreenEditor = false
     },
     requestNewNotebook(): void {

@@ -101,6 +101,11 @@ const ICONS: Record<string, El[]> = {
     { kind: 'circle', cx: 12, cy: 12, r: 1.1 },
     { kind: 'circle', cx: 19, cy: 12, r: 1.1 }
   ],
+  download: [
+    { kind: 'path', d: 'M12 3v12' },
+    { kind: 'path', d: 'M7 10l5 5 5-5' },
+    { kind: 'path', d: 'M5 21h14' }
+  ],
   folder: [
     {
       kind: 'path',

@@ -56,7 +56,11 @@ export default {
     notebookName: '笔记本名称',
     settings: '设置',
     deleteTitle: '删除笔记本',
-    deleteDesc: '「{name}」中的笔记不会被删除，将移入「全部」。此操作不可恢复。'
+    deleteDesc: '「{name}」中的笔记不会被删除，将移入「全部」。此操作不可恢复。',
+    exportNotebook: '导出为 ZIP',
+    exportSuccess: '已导出 {n} 篇笔记：{file}',
+    exportEmpty: '没有可导出的笔记',
+    exportFailed: '导出失败'
   },
   home: {
     emptyTitle: '还没有笔记',
@@ -115,10 +119,7 @@ export default {
     imageUnsupported: '不支持的图片格式',
             // 图片格式提示已在上方声明
       richText: '富文本',
-      markdown: 'Markdown',
-      formatSwitchTitle: '切换笔记格式',
-      formatSwitchDesc: '切换后正文将被转换，部分复杂排版（如对齐、特殊 HTML）可能会丢失。',
-      formatSwitched: '格式已切换',
+      markdown: 'MD',
         formatSwitchFailed: '格式切换失败'
   },
   toolbar: {
@@ -143,9 +144,9 @@ export default {
     clearFormat: '清除格式'
   },
     markdown: {
+      preview: '预览',
+      edit: '编辑',
       split: '分屏',
-      edit: '仅编辑',
-      preview: '仅预览',
       link: '插入链接',
       bold: '加粗文字',
       italic: '斜体文字',
@@ -262,6 +263,9 @@ export default {
     changeDirDesc: '将现有全部数据迁移到新目录',
     changeDirTitle: '更换存储目录',
     changeDirConfirm: '确认迁移到新目录吗？数据会完整复制过去。',
+    editing: '编辑',
+    defaultFormat: '默认文件格式',
+    defaultFormatDesc: '新建笔记时默认使用的正文格式',
     about: '关于',
     version: '版本',
     localFirst: '墨记 · 本地优先的个人记录软件'

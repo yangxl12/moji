@@ -26,6 +26,7 @@ const api: InkApi = {
   createNotebook: (name) => ipcRenderer.invoke('notebooks:create', name),
   renameNotebook: (id, name) => ipcRenderer.invoke('notebooks:rename', id, name),
   deleteNotebook: (id) => ipcRenderer.invoke('notebooks:delete', id),
+  exportNotebook: (notebookId) => ipcRenderer.invoke('notebooks:export', notebookId),
     /* openExternal 由主进程注册，这里只保留说明
   // ipcMain.handle('app:openExternal', async (_e, url: string) => {
     // if (!/^(https?:|mailto:)/i.test(url || '')) return

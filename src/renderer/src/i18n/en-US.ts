@@ -57,7 +57,11 @@ export default {
     notebookName: 'Notebook name',
     settings: 'Settings',
     deleteTitle: 'Delete notebook',
-    deleteDesc: 'Notes inside “{name}” will not be deleted — they will move to “All”. This cannot be undone.'
+    deleteDesc: 'Notes inside “{name}” will not be deleted — they will move to “All”. This cannot be undone.',
+    exportNotebook: 'Export as ZIP',
+    exportSuccess: 'Exported {n} notes: {file}',
+    exportEmpty: 'No notes to export',
+    exportFailed: 'Export failed'
   },
   home: {
     emptyTitle: 'No notes yet',
@@ -115,10 +119,7 @@ export default {
     imageProcessing: 'Processing image…',
     imageUnsupported: 'Unsupported image format',
       richText: 'Rich text',
-      markdown: 'Markdown',
-      formatSwitchTitle: 'Switch note format',
-      formatSwitchDesc: 'The content will be converted. Complex formatting such as alignment or custom HTML may be lost.',
-      formatSwitched: 'Format switched',
+      markdown: 'MD',
         formatSwitchFailed: 'Failed to switch format'
   },
   toolbar: {
@@ -143,9 +144,9 @@ export default {
     clearFormat: 'Clear formatting'
   },
     markdown: {
+      preview: 'Preview',
+      edit: 'Edit',
       split: 'Split',
-      edit: 'Edit only',
-      preview: 'Preview only',
       link: 'Insert link',
       bold: 'Bold text',
       italic: 'Italic text',
@@ -263,6 +264,9 @@ export default {
     changeDirDesc: 'Migrate all existing data to a new folder',
     changeDirTitle: 'Change storage folder',
     changeDirConfirm: 'Migrate to the new folder? All data will be copied over.',
+    editing: 'Editing',
+    defaultFormat: 'Default note format',
+    defaultFormatDesc: 'Default format used when creating new notes',
     about: 'About',
     version: 'Version',
     localFirst: 'InkNote · A local-first personal note app'

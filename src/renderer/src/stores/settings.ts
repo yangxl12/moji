@@ -9,6 +9,7 @@ const DEFAULTS: Settings = {
   fontSize: 'medium',
   contentFont: '"Source Han Serif SC","Noto Serif SC","Songti SC",Georgia,"Times New Roman",serif',
   language: 'zh-CN',
+  defaultFormat: 'richtext',
   ai: null
 }
 
