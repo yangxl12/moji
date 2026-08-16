@@ -2,7 +2,7 @@
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Editor } from '@tiptap/vue-3'
-import type { AiConfig, AiStrength } from '@shared/types'
+import type { AiConfig, AiStrength, NoteFormat } from '@shared/types'
 import Icon from '@/components/ui/Icon.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { useSettingsStore } from '@/stores/settings'
@@ -10,7 +10,13 @@ import { useUiStore } from '@/stores/ui'
 import { docToText, textToDoc } from '@/utils/text'
 import { cleanIpcError, toPlainIpc } from '@/utils/ipc'
 
-const props = defineProps<{ editor: Editor | null; open: boolean }>()
+const props = defineProps<{
+  editor: Editor | null
+  open: boolean
+  format?: NoteFormat
+  getContent?: () => string
+  replaceContent?: (text: string) => void
+}>()
 const emit = defineEmits<{ close: [] }>()
 
 const { t } = useI18n()
@@ -53,7 +59,7 @@ async function start(): Promise<void> {
     return
   }
   const editor = props.editor
-  const text = editor ? docToText(editor.getJSON()) : ''
+  const text = props.getContent ? props.getContent() : editor ? docToText(editor.getJSON()) : ''
   if (!text) {
     ui.toast('info', t('ai.emptyContent'))
     emit('close')
@@ -84,7 +90,7 @@ async function start(): Promise<void> {
   try {
     // IPC 走结构化克隆，先把响应式状态剥离成纯对象
     const config: AiConfig = toPlainIpc({ ...cfg })
-    await window.api.startAiPolish({ config, text, strength: strength.value })
+    await window.api.startAiPolish({ config, text, strength: strength.value, format: props.format })
   } catch (e) {
     errorMsg.value = cleanIpcError(e)
     phase.value = 'error'
@@ -109,8 +115,12 @@ function stop(): void {
 }
 
 function replace(): void {
-  if (!props.editor) return
-  props.editor.commands.setContent(textToDoc(result.value) as never)
+  if (!props.replaceContent && !props.editor) return
+  if (props.replaceContent) {
+    props.replaceContent(result.value)
+  } else {
+    props.editor!.commands.setContent(textToDoc(result.value) as never)
+  }
   ui.toast('success', t('ai.doneTitle'))
   emit('close')
 }

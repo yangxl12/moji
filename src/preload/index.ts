@@ -16,6 +16,7 @@ const api: InkApi = {
   chooseDirectory: () => ipcRenderer.invoke('app:chooseDirectory'),
   initStorage: (dir) => ipcRenderer.invoke('app:initStorage', dir),
   migrateStorage: (dir) => ipcRenderer.invoke('app:migrateStorage', dir),
+  openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
   openStorageDir: () => ipcRenderer.invoke('app:openStorageDir'),
 
   getSettings: () => ipcRenderer.invoke('settings:get'),
@@ -25,6 +26,12 @@ const api: InkApi = {
   createNotebook: (name) => ipcRenderer.invoke('notebooks:create', name),
   renameNotebook: (id, name) => ipcRenderer.invoke('notebooks:rename', id, name),
   deleteNotebook: (id) => ipcRenderer.invoke('notebooks:delete', id),
+    /* openExternal 由主进程注册，这里只保留说明
+  // ipcMain.handle('app:openExternal', async (_e, url: string) => {
+    // if (!/^(https?:|mailto:)/i.test(url || '')) return
+    // await shell.openExternal(url)
+  })
+    */
 
   listNotes: () => ipcRenderer.invoke('notes:list'),
   getNote: (id) => ipcRenderer.invoke('notes:get', id),

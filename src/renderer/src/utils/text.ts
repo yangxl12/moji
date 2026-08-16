@@ -1,5 +1,8 @@
 /** 从 TipTap JSON 中提取纯文本 */
+import type { NoteMeta } from '@shared/types'
+import { markdownToText } from './markdown'
 export function docToText(doc: unknown): string {
+  if (typeof doc === 'string') return doc.trim()
   const parts: string[] = []
   const walk = (node: unknown): void => {
     if (!node || typeof node !== 'object') return
@@ -71,4 +74,17 @@ export function countWords(doc: unknown): number {
   const cjk = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) ?? []).length
   const latin = (text.replace(/[\u4e00-\u9fff\u3400-\u4dbf]/g, ' ').match(/[A-Za-z0-9]+/g) ?? []).length
   return cjk + latin
+}
+
+/** 笔记正文 → 纯文本：富文本走 TipTap JSON，Markdown 走源码提取 */
+export function noteToText(note: Pick<NoteMeta, 'content' | 'format'>): string {
+  if (note.format === 'markdown') return markdownToText(typeof note.content === 'string' ? note.content : '')
+  return docToText(note.content)
+}
+
+/** 笔记摘要（无标题时列表卡片使用） */
+export function noteExcerpt(note: Pick<NoteMeta, 'content' | 'format'>, max = 110): string {
+  const text = noteToText(note)
+  if (text.length <= max) return text
+  return text.slice(0, max).trimEnd() + '…'
 }

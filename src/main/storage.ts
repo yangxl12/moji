@@ -2,7 +2,7 @@ import { app, safeStorage, shell } from 'electron'
 import { promises as fs, existsSync } from 'fs'
 import { join, resolve, basename } from 'path'
 import { randomUUID } from 'crypto'
-import type { AiConfig, Notebook, NoteMeta, Settings, WindowState } from '@shared/types'
+import type { AiConfig, NoteFormat, Notebook, NoteMeta, Settings, WindowState } from '@shared/types'
 
 // ---------- 默认设置 ----------
 export const DEFAULT_SETTINGS: Settings = {
@@ -19,6 +19,20 @@ const NOTE_DIR = 'notes'
 const IMAGE_DIR = 'images'
 const SETTINGS_FILE = 'settings.json'
 const NOTEBOOKS_FILE = 'notebooks.json'
+
+/** 旧数据没有 format 字段：读取时统一按富文本兼容，缺失 images 兜底为空数组 */
+function normalizeNoteMeta(note: NoteMeta): NoteMeta {
+  return {
+    ...note,
+    format: note.format === 'markdown' ? 'markdown' : 'richtext',
+    images: Array.isArray(note.images) ? note.images : []
+  }
+}
+
+/** 新增/切换笔记格式时归一化，非法值一律回退富文本 */
+function normalizeFormat(format: NoteFormat | undefined): NoteFormat {
+  return format === 'markdown' ? 'markdown' : 'richtext'
+}
 
 interface MetaFile {
   rootDir: string | null
@@ -361,7 +375,7 @@ export async function listNotes(): Promise<NoteMeta[]> {
       if (!f.endsWith('.json')) continue
       try {
         const raw = JSON.parse(await fs.readFile(join(root, NOTE_DIR, f), 'utf-8'))
-        list.push(raw as NoteMeta)
+        list.push(normalizeNoteMeta(raw as NoteMeta))
       } catch {
         /* 跳过损坏文件 */
       }
@@ -376,7 +390,7 @@ export async function getNote(id: string): Promise<NoteMeta | null> {
   const root = await getRootDir()
   if (!root) return null
   try {
-    return JSON.parse(await fs.readFile(notePath(root, id), 'utf-8')) as NoteMeta
+    return normalizeNoteMeta(JSON.parse(await fs.readFile(notePath(root, id), 'utf-8')) as NoteMeta)
   } catch {
     return null
   }
@@ -384,7 +398,7 @@ export async function getNote(id: string): Promise<NoteMeta | null> {
 
 async function updateNoteFile(
   id: string,
-  patch: Partial<Pick<NoteMeta, 'title' | 'content' | 'notebookId'>>
+  patch: Partial<Pick<NoteMeta, 'title' | 'content' | 'notebookId' | 'format'>>
 ): Promise<NoteMeta> {
   const root = await getRootDir()
   if (!root) throw new Error('No storage')
@@ -393,6 +407,7 @@ async function updateNoteFile(
     let parsed: NoteMeta
     try {
       parsed = JSON.parse(await fs.readFile(file, 'utf-8')) as NoteMeta
+        parsed = normalizeNoteMeta(parsed)
     } catch {
       throw new Error('Note not found')
     }
@@ -402,12 +417,16 @@ async function updateNoteFile(
       title: patch.title !== undefined ? (patch.title.trim() || '') : parsed.title,
       updatedAt: Date.now()
     }
+      merged.format = normalizeFormat(merged.format)
+      if (merged.format === 'markdown' && typeof merged.content !== 'string') {
+        throw new Error('Markdown note content must be a string')
+      }
     await atomicWrite(file, JSON.stringify(merged, null, 2))
     return merged
   })
 }
 
-export async function createNote(input: { title?: string; notebookId: string | null }): Promise<NoteMeta> {
+export async function createNote(input: { title?: string; notebookId: string | null; format?: NoteFormat }): Promise<NoteMeta> {
   const root = await getRootDir()
   if (!root) throw new Error('No storage')
   const now = Date.now()
@@ -415,7 +434,8 @@ export async function createNote(input: { title?: string; notebookId: string | n
     id: randomUUID(),
     title: input.title?.trim() || '',
     notebookId: input.notebookId,
-    content: null,
+    format: normalizeFormat(input.format),
+      content: normalizeFormat(input.format) === 'markdown' ? '' : null,
     createdAt: now,
     updatedAt: now,
     images: []
@@ -424,7 +444,7 @@ export async function createNote(input: { title?: string; notebookId: string | n
   return note
 }
 
-export const updateNote = (id: string, patch: Partial<Pick<NoteMeta, 'title' | 'content' | 'notebookId'>>) =>
+export const updateNote = (id: string, patch: Partial<Pick<NoteMeta, 'title' | 'content' | 'notebookId' | 'format'>>) =>
   updateNoteFile(id, patch)
 
 export async function deleteNotes(ids: string[]): Promise<void> {
@@ -464,6 +484,7 @@ async function addImageToNote(noteId: string, fileName: string): Promise<void> {
     let parsed: NoteMeta
     try {
       parsed = JSON.parse(await fs.readFile(file, 'utf-8')) as NoteMeta
+        parsed = normalizeNoteMeta(parsed)
     } catch {
       return
     }

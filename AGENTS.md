@@ -13,7 +13,7 @@ UI 风格「宣纸 · 朱砂 · 夜墨」，中英双语。
 
 - Electron 34 + electron-vite 3 + Vite 6 + TypeScript 5（strict 全开）
 - Vue 3（`<script setup>` 组合式 API）+ Pinia + vue-router（hash 模式）+ vue-i18n
-- TipTap 2 富文本（starter-kit + image/link/placeholder/text-align/underline）
+- TipTap 2 富文本（starter-kit + image/link/placeholder/text-align/underline）+ CodeMirror 6 / markdown-it Markdown 模式
 - Playwright `_electron` 做冒烟/视觉测试；electron-builder 打 NSIS 安装包
 
 ## 常用命令
@@ -74,7 +74,7 @@ scripts/                   # smoke.mjs / visual-check.mjs / check-packaged.mjs /
 <rootDir>/
   settings.json      # 设置；AI 密钥经 DPAPI(safeStorage) 加密为 apiKeyEnc，不可用时 base64 兜底
   notebooks.json     # [{id, name, createdAt}]，"全部" 即 notebookId === null，不落库
-  notes/<uuid>.json  # 每篇一个文件：标题 + TipTap JSON 正文 + images 文件名列表
+  notes/<uuid>.json  # 每篇一个文件：标题 + format + 正文（richtext=TipTap JSON / markdown=源码字符串）+ images 文件名列表
   images/            # 图片文件；删除笔记时按 note.images 清理
 ```
 
@@ -90,7 +90,7 @@ scripts/                   # smoke.mjs / visual-check.mjs / check-packaged.mjs /
 3. **类型检查**：`strict` + `noUnusedLocals/Parameters`；web 侧用 `vue-tsc`（`npm run typecheck` 全查）。新增文件会被对应 tsconfig 自动纳入。
 4. **国际化**：UI 文案一律 `t('key')`，禁止硬编码中文；新 key 同时加进 `zh-CN.ts` 与 `en-US.ts`，键按 `视图.语义` 分层。
 5. **样式**：不新造色值——使用 `main.css` 的 CSS 变量（`--bg --surface --ink --accent --line --danger` 等）；主题切换靠 `<html data-theme="light|dark">`，由 `stores/settings.ts` 的 `apply()` 统一驱动（含字体、字号缩放、i18n locale、nativeTheme）。
-6. **编辑器**：TipTap 扩展只在 `EditorView.vue` 的 `useEditor` 里配置；正文即 `editor.getJSON()`。自动保存：输入 900ms 防抖 → `notes:update`；返回/卸载/Ctrl+S 强制 `flushSave`。图片管线：`utils/compress.ts`（>2M 压到 2M 内，>10M 拒绝）→ `images:save` → src 为 `inkimg://image/<file>`（自定义协议，主进程注册）。
+6. **编辑器**：TipTap 扩展只在 `EditorView.vue` 的 `useEditor` 里配置；正文即 `editor.getJSON()`。自动保存：输入 900ms 防抖 → `notes:update`；返回/卸载/Ctrl+S 强制 `flushSave`。图片管线：`utils/compress.ts`（>2M 压到 2M 内，>10M 拒绝）→ `images:save` → src 为 `inkimg://image/<file>`（自定义协议，主进程注册）。Markdown 模式封装在 `components/MarkdownEditor.vue`：正文为字符串，笔记带 `format` 字段，保存时由 `flushSave` 按格式取 `mdContent` 或 TipTap JSON。
 7. **AI**：兼容 OpenAI `/chat/completions`（DeepSeek/Kimi/通义/智谱/Ollama…）；连接测试 20s 超时、润色 180s 超时；`AbortController` 取消，同一时刻只允许一个润色任务。三档强度提示词与温度在 `ai.ts` 顶部常量。
 8. **CSP**：`renderer/index.html` 已声明 CSP，connect-src 放行 http/https/ws（AI 调用依赖它），改网络请求别忘核对。
 

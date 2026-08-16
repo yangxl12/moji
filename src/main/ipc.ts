@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron'
+import { BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import * as storage from './storage'
 import * as ai from './ai'
 import { setTrayMenuLabels, type TrayMenuLabels } from './tray'
@@ -26,6 +26,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle('app:initStorage', (_e, dir: string) => storage.initStorage(dir))
   ipcMain.handle('app:migrateStorage', (_e, dir: string) => storage.migrateStorage(dir))
   ipcMain.handle('app:openStorageDir', () => storage.openStorageDir())
+  ipcMain.handle('app:openExternal', async (_e, url: string) => {
+    if (!/^(https?:|mailto:)/i.test(url || '')) return
+    await shell.openExternal(url)
+  })
 
   // ---------- 设置 ----------
   ipcMain.handle('settings:get', () => storage.loadSettings())
@@ -43,12 +47,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---------- 笔记 ----------
   ipcMain.handle('notes:list', () => storage.listNotes())
   ipcMain.handle('notes:get', (_e, id: string) => storage.getNote(id))
-  ipcMain.handle('notes:create', (_e, input: { title?: string; notebookId: string | null }) =>
+  ipcMain.handle('notes:create', (_e, input: { title?: string; notebookId: string | null; format?: import('@shared/types').NoteFormat }) =>
     storage.createNote(input)
   )
   ipcMain.handle(
     'notes:update',
-    (_e, id: string, patch: Partial<Pick<import('@shared/types').NoteMeta, 'title' | 'content' | 'notebookId'>>) =>
+    (_e, id: string, patch: Partial<Pick<import('@shared/types').NoteMeta, 'title' | 'content' | 'notebookId' | 'format'>>) =>
       storage.updateNote(id, patch)
   )
   ipcMain.handle('notes:delete', (_e, ids: string[]) => storage.deleteNotes(ids))

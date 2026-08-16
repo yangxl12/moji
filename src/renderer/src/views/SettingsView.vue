@@ -360,12 +360,14 @@ const langOptions = computed(() => [
 .st-row-link {
   width: 100%;
   text-align: left;
-  transition: padding 0.18s var(--ease);
+  transition: background 0.15s var(--ease);
   border-radius: var(--r-sm);
 }
 .st-row-link:hover {
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
+  background: var(--surface-2);
+}
+.st-row-link .st-ai-badge {
+  margin-left: auto;
 }
 .st-row-left {
   min-width: 0;

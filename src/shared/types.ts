@@ -4,6 +4,8 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 export type FontSize = 'small' | 'medium' | 'large'
 export type Language = 'zh-CN' | 'en-US'
 export type AiStrength = 'gentle' | 'standard' | 'deep'
+/** 笔记正文格式：富文本 TipTap JSON / Markdown 源码字符串 */
+export type NoteFormat = 'richtext' | 'markdown'
 
 export interface AiConfig {
   /** OpenAI 兼容接口地址，例如 https://api.deepseek.com/v1 */
@@ -41,7 +43,9 @@ export interface NoteFile {
   id: string
   title: string
   notebookId: string | null
-  content: unknown | null // TipTap JSON
+  content: unknown | null // richtext: TipTap JSON；markdown: 源码字符串
+  /** 正文格式；老数据可能缺省，读取方需按 richtext 兼容 */
+  format?: NoteFormat
   createdAt: number
   updatedAt: number
   images: string[] // 关联的图片文件名，删除笔记时清理
@@ -50,6 +54,8 @@ export interface NoteFile {
 export interface NoteMeta {
   id: string
   title: string
+  /** 正文格式；老数据可能缺省，读取方需按 richtext 兼容 */
+  format?: NoteFormat
   notebookId: string | null
   content: unknown | null
   createdAt: number
@@ -106,6 +112,8 @@ export interface AiPolishInput {
   config: AiConfig
   text: string
   strength: AiStrength
+  /** 当前笔记格式；markdown 时要求模型以 Markdown 结构输出 */
+  format?: NoteFormat
 }
 
 export interface WindowState {
@@ -150,10 +158,12 @@ export interface InkApi {
 
   listNotes(): Promise<NoteMeta[]>
   getNote(id: string): Promise<NoteMeta | null>
-  createNote(input: { title?: string; notebookId: string | null }): Promise<NoteMeta>
-  updateNote(id: string, patch: { title?: string; content?: unknown; notebookId?: string | null }): Promise<NoteMeta>
+  createNote(input: { title?: string; notebookId: string | null; format?: NoteFormat }): Promise<NoteMeta>
+  updateNote(id: string, patch: { title?: string; content?: unknown; notebookId?: string | null; format?: NoteFormat }): Promise<NoteMeta>
   deleteNotes(ids: string[]): Promise<void>
   moveNotes(ids: string[], notebookId: string | null): Promise<void>
+
+    openExternal(url: string): Promise<void>
 
   saveImage(payload: SaveImagePayload): Promise<SaveImageResult>
 

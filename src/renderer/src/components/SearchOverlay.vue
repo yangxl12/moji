@@ -6,7 +6,7 @@ import Icon from '@/components/ui/Icon.vue'
 import { useUiStore } from '@/stores/ui'
 import { useNotesStore } from '@/stores/notes'
 import { useNotebooksStore } from '@/stores/notebooks'
-import { docToText } from '@/utils/text'
+import { noteToText } from '@/utils/text'
 import { timeAgo } from '@/utils/format'
 
 const ui = useUiStore()
@@ -33,7 +33,7 @@ const hits = computed<Hit[]>(() => {
   const out: Hit[] = []
   for (const n of notes.all) {
     const title = n.title || t('common.untitled')
-    const text = docToText(n.content)
+    const text = noteToText(n)
     if (title.toLowerCase().includes(q) || text.toLowerCase().includes(q)) {
       let excerpt = text
       const idx = text.toLowerCase().indexOf(q)

@@ -38,11 +38,12 @@ export const useNotesStore = defineStore('notes', {
       useNotebooksStore().recount()
     },
     /** 编辑器自动保存后同步本地列表 */
-    syncLocal(id: string, patch: Partial<Pick<NoteMeta, 'title' | 'content'>>): void {
+    syncLocal(id: string, patch: Partial<Pick<NoteMeta, 'title' | 'content' | 'format'>>): void {
       const n = this.all.find((x) => x.id === id)
       if (n) {
         if (patch.title !== undefined) n.title = patch.title
         if (patch.content !== undefined) n.content = patch.content
+          if (patch.format !== undefined) n.format = patch.format
         n.updatedAt = Date.now()
       }
     },

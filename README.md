@@ -10,6 +10,7 @@
 - **笔记本管理**：默认「全部」+ 自定义笔记本的增删改查；删除笔记本时笔记自动移入「全部」
 - **笔记管理**：卡片式列表、批量删除、批量移动到其他笔记本、全局全文搜索（Ctrl+K）
 - **富文本编辑**：TipTap 编辑器，支持加粗 / 斜体 / 下划线 / 删除线、标题、引用、列表、代码块、对齐、分割线、撤销重做
+- **Markdown 编辑**：CodeMirror 6 源码编辑 + markdown-it 实时预览，支持分屏 / 仅编辑 / 仅预览，可与富文本按笔记切换
 - **图片**：支持粘贴 / 拖拽 / 按钮插入；超过 2M 自动压缩到 2M 以内，超过 10M 拒绝插入
 - **AI 润色**：流式输出，轻度 / 标准 / 深度三档强度，一键替换全文
 - **AI 配置**：兼容 OpenAI 格式的任意大模型服务（DeepSeek / Kimi / 通义千问 / 智谱 / Ollama…），密钥使用系统 DPAPI 加密存储（不落明文、存储目录自动写入 .gitignore 防止密钥文件被提交），支持测试连接；模型名称列表保存在本地，可增删改查、切换当前使用模型
@@ -39,10 +40,10 @@ npm run build:win  # 打包 Windows 安装包 → release/
   .gitignore          # 自动生成：忽略 settings.json，防止密钥文件进版本库
   settings.json      # 应用设置（AI 密钥经 DPAPI 加密）
   notebooks.json     # 笔记本列表
-  notes/<id>.json    # 每篇笔记一个文件（TipTap JSON）
+  notes/<id>.json    # 每篇笔记一个文件（format 为 richtext 时存 TipTap JSON；markdown 时存源码字符串）
   images/            # 插入的图片
 ```
 
 ## 技术栈
 
-Electron 34 · Vue 3 · TypeScript · Vite (electron-vite) · Pinia · vue-i18n · TipTap 2
+Electron 34 · Vue 3 · TypeScript · Vite (electron-vite) · Pinia · vue-i18n · TipTap 2 · CodeMirror 6 · markdown-it

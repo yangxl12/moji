@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import type { AiConfig, AiPolishInput, AiStrength, AiStreamEvent, AiTestResult } from '@shared/types'
+import type { AiConfig, AiPolishInput, AiStrength, AiStreamEvent, AiTestResult, NoteFormat } from '@shared/types'
 
 // ---------- 每种强度的润色指令 ----------
 const STRENGTH_PROMPTS: Record<AiStrength, string> = {
@@ -41,10 +41,11 @@ function apiKey(config: AiConfig): string {
   return (config.apiKey || '').trim()
 }
 
-function systemPrompt(config: AiConfig, strength: AiStrength): string {
+function systemPrompt(config: AiConfig, strength: AiStrength, format?: NoteFormat): string {
   let p = STRENGTH_PROMPTS[strength] ?? STRENGTH_PROMPTS.standard
   const extra = (config.customPrompt || '').trim()
   if (extra) p += '\n\n此外，请严格遵循以下额外要求：\n' + extra
+  if (format === 'markdown') p += '\n\n请使用 Markdown 格式输出，保留适合的标题、列表、引用、代码块等结构，不要输出 HTML。'
   return p
 }
 
@@ -155,7 +156,7 @@ export async function startAiPolish(win: BrowserWindow | null, input: AiPolishIn
         body: JSON.stringify({
           model: input.config.model,
           messages: [
-            { role: 'system', content: systemPrompt(input.config, input.strength) },
+            { role: 'system', content: systemPrompt(input.config, input.strength, input.format) },
             { role: 'user', content: input.text }
           ],
           temperature: temperature(input.config, input.strength),

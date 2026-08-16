@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import type { NoteMeta } from '@shared/types'
-import { docExcerpt } from '@/utils/text'
+import { noteExcerpt } from '@/utils/text'
 import { isTruncated } from '@/utils/directives'
 
 const props = defineProps<{
@@ -23,7 +23,7 @@ const { t } = useI18n()
 const title = computed(() => {
   const own = props.note.title.trim()
   if (own) return own
-  return docExcerpt(props.note.content, 60) || t('common.untitled')
+  return noteExcerpt(props.note, 60) || t('common.untitled')
 })
 
 /** 仅当标题被裁切显示省略号时才提示完整标题 */

@@ -14,9 +14,13 @@ import Icon from '@/components/ui/Icon.vue'
 import EditorToolbar from '@/components/EditorToolbar.vue'
 import AiPolishPanel from '@/components/AiPolishPanel.vue'
 import { useNotesStore } from '@/stores/notes'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import MarkdownEditor from '@/components/MarkdownEditor.vue'
+import type { NoteFormat } from '@shared/types'
+import { markdownToText, renderMarkdownSafe, richTextDocToMarkdown } from '@/utils/markdown'
 import { useNotebooksStore } from '@/stores/notebooks'
 import { useUiStore } from '@/stores/ui'
-import { countWords } from '@/utils/text'
+import { countWords, docToText, textToDoc } from '@/utils/text'
 import { processImageFile, formatBytes } from '@/utils/compress'
 import { timeAgo, formatDate } from '@/utils/format'
 import { cleanIpcError } from '@/utils/ipc'
@@ -44,6 +48,36 @@ const createdAt = ref(0)
 const wordCount = ref(0)
 const aiOpen = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const format = ref<NoteFormat>('richtext')
+const mdContent = ref('')
+const mdEditor = ref<InstanceType<typeof MarkdownEditor> | null>(null)
+const formatSwitching = ref(false)
+
+const isMarkdown = computed(() => format.value === 'markdown')
+const formatOptions = computed(() => [
+  { value: 'richtext', label: t('editor.richText') },
+  { value: 'markdown', label: t('editor.markdown') }
+])
+const formatModel = computed({
+  get: () => format.value,
+  set: (value: string) => {
+    if (value === 'richtext' || value === 'markdown') void switchFormat(value)
+  }
+})
+
+function getAiContent(): string {
+  return isMarkdown.value ? mdContent.value : (editor.value ? docToText(editor.value.getJSON()) : '')
+}
+
+function replaceAiContent(text: string): void {
+  if (isMarkdown.value) {
+    mdContent.value = text
+    mdEditor.value?.setText(text)
+  } else {
+    editor.value?.commands.setContent(textToDoc(text) as never)
+  }
+  scheduleSave()
+}
 
 // ---------- 正文右键菜单 ----------
 // 选中内容右键：复制 + 全选；未选中右键：仅全选
@@ -185,21 +219,29 @@ const editor = useEditor({
   }
 })
 
+/** 当前编辑器正文内容：富文本取 TipTap JSON，Markdown 取源码字符串 */
+function currentContent(): unknown {
+  return isMarkdown.value ? mdContent.value : (editor.value?.getJSON() ?? null)
+}
+
+  // 上方重复声明已移除
+
 async function flushSave(): Promise<void> {
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
   }
-  if (loading.value || !editor.value) return
+  if (loading.value || (!isMarkdown.value && !editor.value)) return
   // 笔记已被删除（本页删除 / 批量删除后组件卸载落盘），无需再保存
   if (!notes.get(noteId)) return
   try {
     saveState.value = 'saving'
     await window.api.updateNote(noteId, {
       title: title.value,
-      content: editor.value.getJSON()
+      content: currentContent(),
+        format: format.value
     })
-    notes.syncLocal(noteId, { title: title.value, content: editor.value.getJSON() })
+    notes.syncLocal(noteId, { title: title.value, content: currentContent(), format: format.value })
     saveState.value = 'saved'
     savedAt.value = Date.now()
   } catch {
@@ -207,10 +249,62 @@ async function flushSave(): Promise<void> {
   }
 }
 
+function currentContentIsEmpty(): boolean {
+  if (isMarkdown.value) return mdContent.value.trim().length === 0
+  return editor.value?.isEmpty ?? true
+}
+
+async function switchFormat(target: NoteFormat): Promise<void> {
+  if (formatSwitching.value || loading.value || target === format.value) return
+  formatSwitching.value = true
+  try {
+    await flushSave()
+      if (saveState.value === 'error') throw new Error('save failed')
+    if (!notes.get(noteId)) return
+    if (!currentContentIsEmpty()) {
+      const ok = await ui.confirm({
+        title: t('editor.formatSwitchTitle'),
+        desc: t('editor.formatSwitchDesc'),
+        okText: t('common.confirm')
+      })
+      if (!ok) return
+    }
+
+    if (target === 'markdown') {
+      if (!notes.get(noteId)) return
+      const doc = editor.value?.getJSON() ?? { type: 'doc', content: [] }
+      mdContent.value = richTextDocToMarkdown(doc)
+    } else {
+      const html = renderMarkdownSafe(mdContent.value)
+      editor.value?.commands.setContent(html)
+    }
+
+    format.value = target
+    await flushSave()
+      if (saveState.value === 'error') throw new Error('save failed')
+    ui.toast('success', t('editor.formatSwitched'))
+  } catch (e) {
+      ui.toast('error', `${t('editor.formatSwitchFailed')} · ${cleanIpcError(e)}`)
+    } finally {
+    formatSwitching.value = false
+  }
+}
+
 function scheduleSave(): void {
   saveState.value = 'saving'
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => void flushSave(), 900)
+}
+
+function onMarkdownInput(text: string): void {
+  mdContent.value = text
+  wordCount.value = countWords(markdownToText(text))
+  onScroll()
+  scheduleSave()
+}
+
+function onMarkdownImageFiles(files: File[]): void {
+  for (const file of files) void handleImageFile(file)
 }
 
 async function handleImageFile(file: File): Promise<void> {
@@ -222,7 +316,11 @@ async function handleImageFile(file: File): Promise<void> {
       name: img.fileName,
       data: img.data
     })
-    editor.value?.chain().focus().setImage({ src: saved.src, alt: img.fileName }).run()
+    if (isMarkdown.value) {
+        mdEditor.value?.insertImage(saved.src, img.fileName)
+      } else {
+        editor.value?.chain().focus().setImage({ src: saved.src, alt: img.fileName }).run()
+      }
     ui.dismissToast(tid)
     if (img.finalSize < img.originalSize) {
       ui.toast('success', t('editor.imageCompressed', { from: formatBytes(img.originalSize), to: formatBytes(img.finalSize) }))
@@ -310,7 +408,8 @@ function onWindowHidden(): void {
 
 /** 列表内按 Enter：聚焦正文开始书写（编辑即预览） */
 function onFocusEditor(): void {
-  editor.value?.chain().focus().run()
+  if (isMarkdown.value) mdEditor.value?.focus()
+  else editor.value?.chain().focus().run()
 }
 
 function onEsc(e: KeyboardEvent): void {
@@ -333,8 +432,15 @@ onMounted(async () => {
   ui.fullscreenEditor = false
   title.value = note.title
   createdAt.value = note.createdAt
-  editor.value?.commands.setContent((note.content as never) ?? { type: 'doc', content: [] })
+  format.value = note.format === 'markdown' ? 'markdown' : 'richtext'
+    if (format.value === 'markdown') {
+      mdContent.value = typeof note.content === 'string' ? note.content : ''
+    } else {
+      editor.value?.commands.setContent((note.content as never) ?? { type: 'doc', content: [] })
+    }
+    // Markdown 字数在下方统一切换后计算
   wordCount.value = countWords(editor.value?.getJSON() ?? null)
+    if (format.value === 'markdown') wordCount.value = countWords(markdownToText(mdContent.value))
   loading.value = false
   saveState.value = 'saved'
   savedAt.value = note.updatedAt
@@ -392,6 +498,9 @@ onBeforeUnmount(() => {
           <Icon name="bot" :size="16" />
         </button>
 
+          <SegmentedControl v-model="formatModel" :options="formatOptions" class="ed-format-switch" />
+
+
         <span class="ed-flex" />
 
         <button class="btn-icon ed-move" :data-tip="t('editor.moveNote')" @click="openMove">
@@ -412,24 +521,33 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div class="ed-row2">
+      <div v-if="!isMarkdown" class="ed-row2">
         <EditorToolbar :editor="editor as unknown as Editor" @insert-image="pickImage" />
       </div>
     </header>
 
     <!-- ---------- 纸页：标题在正文顶部，编辑即预览 ---------- -->
     <div ref="scrollEl" class="ed-scroll" @scroll="onScroll">
-      <div class="ed-sheet">
+      <div class="ed-sheet" :class="{ 'ed-sheet-md': isMarkdown }">
         <input
           v-model="title"
           class="ed-title"
           :placeholder="t('editor.untitled')"
           spellcheck="false"
           @input="scheduleSave"
-          @keydown.enter.prevent="editor?.chain().focus().run()"
+          @keydown.enter.prevent="onFocusEditor"
         />
         <hr class="ed-rule" />
-        <EditorContent :editor="editor" class="ed-content" />
+        <EditorContent v-if="!isMarkdown" :editor="editor" class="ed-content" />
+          <MarkdownEditor
+            v-else
+            ref="mdEditor"
+            v-model="mdContent"
+            :placeholder="t('markdown.placeholder')"
+            @update:model-value="onMarkdownInput"
+            @image-files="onMarkdownImageFiles"
+            @insert-image="pickImage"
+          />
 
         <!-- 元信息：保存状态 · 编辑/创建时间 · 字数，紧凑一行 -->
         <footer v-if="!loading" class="ed-meta">
@@ -478,7 +596,14 @@ onBeforeUnmount(() => {
       @change="onFileChange"
     />
 
-    <AiPolishPanel :editor="(editor as unknown as Editor)" :open="aiOpen" @close="aiOpen = false" />
+    <AiPolishPanel
+        :editor="(editor as unknown as Editor)"
+        :open="aiOpen"
+        :format="format"
+        :get-content="getAiContent"
+        :replace-content="replaceAiContent"
+        @close="aiOpen = false"
+      />
 
     <!-- ---------- 正文右键菜单：选中 → 复制/全选；未选中 → 仅全选 ---------- -->
     <Teleport to="body">
@@ -576,6 +701,10 @@ onBeforeUnmount(() => {
 .ed-flex {
   flex: 1;
 }
+.ed-format-switch {
+  flex: none;
+  margin: 0 0.6rem;
+}
 .ed-sep {
   width: 1px;
   height: 1.05rem;
@@ -618,6 +747,17 @@ onBeforeUnmount(() => {
   padding: 2.2rem 2.9rem 2.4rem;
   animation: fade-up 0.4s var(--ease-out);
   transition: max-width 0.32s var(--ease-out);
+}
+.ed-sheet-md {
+  max-width: 1180px;
+}
+@media (max-width: 1240px) {
+  .ed-sheet-md {
+.editor-page.fullscreen .ed-sheet.ed-sheet-md {
+  max-width: 1180px;
+}
+    max-width: 100%;
+  }
 }
 
 /* ---------- 纸页内标题：位于正文区域顶部 ---------- */
