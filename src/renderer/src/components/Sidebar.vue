@@ -33,15 +33,14 @@ const editInput = ref<HTMLInputElement | null>(null)
 watch(
   () => ui.notebookCreateReq,
   (v) => {
-    if (v > 0) {
-      if (ui.sidebarCollapsed) ui.toggleSidebar()
-      void beginCreate()
-    }
+    if (v > 0) void beginCreate()
   },
   { immediate: true }
 )
 
 async function beginCreate(): Promise<void> {
+  // 折叠态下先展开侧栏，再进入命名输入
+  if (ui.sidebarCollapsed) ui.toggleSidebar()
   creating.value = true
   newName.value = ''
   await nextTick()
@@ -182,20 +181,14 @@ onBeforeUnmount(() => {
     <nav class="sb-nav">
       <div class="sb-section">
         <div class="sb-section-head">
-          <Transition name="fade" mode="out-in">
-            <span v-if="!collapsed" class="sb-section-title">{{ t('sidebar.notebooks') }}</span>
-            <span v-else class="sb-section-line" />
-          </Transition>
-          <Transition name="fade">
-            <button
-              v-if="!collapsed"
-              v-tip="t('sidebar.newNotebook')"
-              class="btn-icon sb-add"
-              @click="beginCreate"
-            >
-              <Icon name="plus" :size="14" />
-            </button>
-          </Transition>
+          <span v-if="!collapsed" class="sb-section-title">{{ t('sidebar.notebooks') }}</span>
+          <button
+            v-tip="t('sidebar.newNotebook')"
+            class="btn-icon sb-add"
+            @click="beginCreate"
+          >
+            <Icon name="plus" :size="14" />
+          </button>
         </div>
 
         <Transition name="fade">
@@ -315,7 +308,7 @@ onBeforeUnmount(() => {
   padding: 0.9rem 0.55rem 0.85rem;
   gap: 0.6rem;
   min-height: 0;
-  transition: width 0.32s var(--spring), padding 0.32s var(--spring);
+  transition: width 0.32s var(--ease-out), padding 0.32s var(--ease-out);
 }
 .sidebar.collapsed {
   width: 64px;
@@ -343,7 +336,7 @@ onBeforeUnmount(() => {
   font-size: 0.8rem;
   transition:
     background 0.15s var(--ease), color 0.15s var(--ease),
-    padding 0.32s var(--spring), gap 0.32s var(--spring);
+    padding 0.32s var(--ease-out), gap 0.32s var(--ease-out);
   position: relative;
   animation: fade-up 0.3s var(--ease-out) both;
   white-space: nowrap;
@@ -380,7 +373,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   flex: none;
   /* 折叠时图标平滑滑到轨道中央：轨道内容宽 48px，图标 15px → (48-15)/2 */
-  transition: transform 0.32s var(--spring);
+  transition: transform 0.32s var(--ease-out);
 }
 .sidebar.collapsed .sb-item-icon {
   transform: translateX(16.5px);
@@ -392,7 +385,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: 1;
-  transition: opacity 0.15s var(--ease), width 0.32s var(--spring);
+  transition: opacity 0.15s var(--ease), width 0.32s var(--ease-out);
 }
 .sidebar.collapsed .sb-item-name {
   flex: none;
@@ -412,10 +405,9 @@ onBeforeUnmount(() => {
   /* 与二级侧栏头部行等高，保证两侧顶部行水平对齐 */
   min-height: 2rem;
 }
-/* 折叠时标题与分割线快速交叉淡入，节奏与宽度回弹一致 */
-.sb-section-head .fade-enter-active,
-.sb-section-head .fade-leave-active {
-  transition-duration: 0.13s;
+/* 折叠时 + 按钮水平居中，替代原标题行 */
+.sidebar.collapsed .sb-section-head {
+  justify-content: center;
 }
 .sb-section-title {
   font-size: 0.72rem;
@@ -423,13 +415,6 @@ onBeforeUnmount(() => {
   letter-spacing: 0.12em;
   color: var(--ink-3);
   text-transform: uppercase;
-}
-.sb-section-line {
-  display: block;
-  height: 1px;
-  width: 70%;
-  margin: 0 auto;
-  background: var(--line);
 }
 .sb-add {
   width: 2rem;

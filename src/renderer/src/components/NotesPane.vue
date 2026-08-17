@@ -548,7 +548,7 @@ onBeforeUnmount(() => {
   border-right: 1px solid var(--line);
   padding: 0.9rem 0.85rem 0.85rem;
   gap: 0.45rem;
-  transition: width 0.3s var(--spring), padding 0.3s var(--spring);
+  transition: width 0.3s var(--ease-out), padding 0.3s var(--ease-out);
   overflow: hidden;
 }
 /* 折叠宽度与一级侧栏一致（64px），底部按钮列才能水平对齐 */
