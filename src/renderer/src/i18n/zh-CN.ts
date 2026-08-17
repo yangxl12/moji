@@ -58,6 +58,8 @@ export default {
     deleteTitle: '删除笔记本',
     deleteDesc: '「{name}」中的笔记不会被删除，将移入「全部」。此操作不可恢复。',
     exportNotebook: '导出为 ZIP',
+    exportNotebookMd: '导出为 MD（ZIP）',
+    exportNotebookPdf: '导出为 PDF（ZIP）',
     exportSuccess: '已导出 {n} 篇笔记：{file}',
     exportEmpty: '没有可导出的笔记',
     exportFailed: '导出失败'
@@ -80,6 +82,14 @@ export default {
     deleteDesc: '将删除 {n} 篇笔记（含其中的图片），此操作不可恢复。',
     movedToast: '已移动到「{name}」',
     deletedToast: '已删除 {n} 篇笔记',
+    copyNotes: '复制',
+    copiedNotes: '已复制 {n} 篇笔记，可按 Ctrl+V 粘贴',
+    pastedNotes: '已粘贴 {n} 篇笔记',
+    exportMd: '导出为 MD',
+    exportPdf: '导出为 PDF',
+    exportSuccess: '已导出 {n} 篇笔记：{file}',
+    exportEmpty: '没有可导出的笔记',
+    exportFailed: '导出失败',
     edited: '编辑于 {time}'
   },
   search: {
@@ -266,6 +276,9 @@ export default {
     editing: '编辑',
     defaultFormat: '默认文件格式',
     defaultFormatDesc: '新建笔记时默认使用的正文格式',
+    toggleShortcut: '显示 / 隐藏快捷键',
+    toggleShortcutDesc: '按下此快捷键显示或隐藏墨记主窗口',
+    toggleShortcutPh: '例如 Shift+Alt+M',
     about: '关于',
     version: '版本',
     localFirst: '墨记 · 本地优先的个人记录软件'

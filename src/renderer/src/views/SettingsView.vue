@@ -117,6 +117,23 @@ const defaultFormatOptions = computed(() => [
   { value: 'richtext', label: t('editor.richText') },
   { value: 'markdown', label: t('editor.markdown') }
 ])
+
+const toggleShortcut = ref(settings.settings.toggleShortcut)
+
+async function saveToggleShortcut(): Promise<void> {
+  const shortcut = toggleShortcut.value.trim()
+  if (!shortcut) {
+    toggleShortcut.value = settings.settings.toggleShortcut
+    return
+  }
+  try {
+    await settings.update({ toggleShortcut: shortcut })
+    toggleShortcut.value = settings.settings.toggleShortcut
+  } catch (error) {
+    toggleShortcut.value = settings.settings.toggleShortcut
+    ui.toast('error', cleanIpcError(error))
+  }
+}
 </script>
 
 <template>
@@ -221,6 +238,20 @@ const defaultFormatOptions = computed(() => [
                 :model-value="settings.settings.defaultFormat"
                 :options="defaultFormatOptions"
                 @update:model-value="(v) => settings.update({ defaultFormat: v as NoteFormat })"
+              />
+            </div>
+            <div class="st-row">
+              <div class="st-row-left">
+                <p class="st-label">{{ t('settings.toggleShortcut') }}</p>
+                <p class="st-desc">{{ t('settings.toggleShortcutDesc') }}</p>
+              </div>
+              <input
+                v-model="toggleShortcut"
+                class="input st-shortcut-input"
+                spellcheck="false"
+                :placeholder="t('settings.toggleShortcutPh')"
+                @change="saveToggleShortcut"
+                @keydown.enter.prevent="saveToggleShortcut"
               />
             </div>
           </div>
@@ -475,6 +506,12 @@ const defaultFormatOptions = computed(() => [
 .st-font-input {
   width: min(300px, 100%);
   height: 2.1rem;
+}
+.st-shortcut-input {
+  width: min(260px, 100%);
+  height: 2.2rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
 }
 .st-preview {
   padding: 0.9rem 1rem;

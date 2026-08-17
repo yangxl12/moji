@@ -10,6 +10,7 @@ const DEFAULTS: Settings = {
   contentFont: '"Source Han Serif SC","Noto Serif SC","Songti SC",Georgia,"Times New Roman",serif',
   language: 'zh-CN',
   defaultFormat: 'richtext',
+  toggleShortcut: 'Shift+Alt+M',
   ai: null
 }
 

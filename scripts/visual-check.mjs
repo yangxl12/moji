@@ -3,7 +3,7 @@ import { _electron } from 'playwright-core'
 import { mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 
-const ROOT = 'D:\\yxlAgent\\moji'
+const ROOT = process.cwd()
 const TMP = join(ROOT, '.test-tmp')
 rmSync(TMP, { recursive: true, force: true })
 const userData = join(TMP, 'user-data')
@@ -164,11 +164,25 @@ check('工具栏胶囊形', (await css('.ed-toolbar', 'border-radius')) === '999
     const cs = getComputedStyle(el)
     return parseFloat(cs.lineHeight) / parseFloat(cs.fontSize)
   })
-  check('正文行高 ≈ 2.05', Math.abs(ratio - 2.05) < 0.05, String(ratio))
+check('正文行高 ≈ 2.05', Math.abs(ratio - 2.05) < 0.05, String(ratio))
 }
 {
   const font = await css('.tiptap', 'font-family')
   check('正文使用内容字体变量', font.includes('Songti') || font.includes('serif'), font)
+}
+check('明亮主题富文本光标使用强调色', (await css('.tiptap', 'caret-color')) !== 'rgb(255, 255, 255)', await css('.tiptap', 'caret-color'))
+await page.hover('.ed-tb-btn[aria-label="加粗"]')
+await page.waitForSelector('.fixed-tip.show')
+{
+  const tip = await page.evaluate(() => {
+    const el = document.querySelector('.fixed-tip.show')
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, z: getComputedStyle(el).zIndex, text: el.textContent }
+  })
+  const [vw, vh] = await vp()
+  check('富文本工具栏 tooltip 完整可见', tip !== null && tip.x >= 0 && tip.y >= 0 && tip.right <= vw && tip.bottom <= vh && tip.text === '加粗', JSON.stringify(tip))
+  check('tooltip 位于纸张颗粒层之上', tip?.z === '2147483001', JSON.stringify(tip))
 }
 
 console.log('▶ 全屏编辑')

@@ -7,6 +7,7 @@ import Dropdown from '@/components/ui/Dropdown.vue'
 import { useNotebooksStore } from '@/stores/notebooks'
 import { useUiStore } from '@/stores/ui'
 import { isTruncated } from '@/utils/directives'
+import type { ExportFormat } from '@shared/types'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -103,7 +104,8 @@ async function removeNotebook(id: string): Promise<void> {
 }
 
 function onNotebookMenu(key: string, id: string): void {
-  if (key === 'export') void exportNotebook(id)
+  if (key === 'export-md') void exportNotebook(id, 'md')
+  else if (key === 'export-pdf') void exportNotebook(id, 'pdf')
   else if (key === 'rename') void beginRename(id)
   else if (key === 'delete') void removeNotebook(id)
 }
@@ -132,9 +134,9 @@ async function openCtx(e: MouseEvent, notebookId: string | null): Promise<void> 
 }
 
 /** 导出当前右键目标笔记本（null 表示「全部」）：zip 落在数据目录根 */
-async function exportNotebook(id: string | null): Promise<void> {
+async function exportNotebook(id: string | null, format: ExportFormat): Promise<void> {
   closeCtx()
-  const res = await window.api.exportNotebook(id)
+  const res = await window.api.exportNotebook(id, format)
   if (res.ok && res.file) {
     const name = res.file.split(/[\\/]/).pop() ?? res.file
     ui.toast('success', t('sidebar.exportSuccess', { n: res.count ?? 0, file: name }))
@@ -250,7 +252,8 @@ onBeforeUnmount(() => {
               <span v-if="!collapsed" class="sb-more" @click.stop>
                 <Dropdown
                   :entries="[
-                    { key: 'export', label: t('sidebar.exportNotebook'), icon: 'download' },
+                    { key: 'export-md', label: t('sidebar.exportNotebookMd'), icon: 'download' },
+                    { key: 'export-pdf', label: t('sidebar.exportNotebookPdf'), icon: 'download' },
                     { key: 'rename', label: t('common.rename'), icon: 'pencil' },
                     { key: 'delete', label: t('common.delete'), icon: 'trash', danger: true }
                   ]"
@@ -278,7 +281,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <!-- ---------- 笔记本右键菜单：导出为 ZIP（「全部」同样支持） ---------- -->
+    <!-- ---------- 笔记本右键菜单：按格式打包 ZIP（「全部」同样支持） ---------- -->
     <Teleport to="body">
       <Transition name="ctx-pop">
         <div
@@ -287,9 +290,13 @@ onBeforeUnmount(() => {
           class="ctx-menu nb-ctx-menu"
           :style="{ left: `${ctx.x}px`, top: `${ctx.y}px` }"
         >
-          <button class="ctx-item" @click="exportNotebook(ctx.notebookId)">
+          <button class="ctx-item" @click="exportNotebook(ctx.notebookId, 'md')">
             <Icon name="download" :size="15" />
-            <span>{{ t('sidebar.exportNotebook') }}</span>
+            <span>{{ t('sidebar.exportNotebookMd') }}</span>
+          </button>
+          <button class="ctx-item" @click="exportNotebook(ctx.notebookId, 'pdf')">
+            <Icon name="download" :size="15" />
+            <span>{{ t('sidebar.exportNotebookPdf') }}</span>
           </button>
         </div>
       </Transition>

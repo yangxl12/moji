@@ -41,6 +41,12 @@ export const useNotesStore = defineStore('notes', {
       }
       useNotebooksStore().recount()
     },
+    async copy(ids: string[], notebookId: string | null): Promise<NoteMeta[]> {
+      const copied = await window.api.copyNotes(ids, notebookId)
+      this.all.unshift(...copied)
+      useNotebooksStore().recount()
+      return copied
+    },
     /** 编辑器自动保存后同步本地列表 */
     syncLocal(id: string, patch: Partial<Pick<NoteMeta, 'title' | 'content' | 'format'>>): void {
       const n = this.all.find((x) => x.id === id)

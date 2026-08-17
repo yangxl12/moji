@@ -3,7 +3,8 @@
    纸张上的铅字
    ============================================================ */
 
-.tiptap {
+.tiptap,
+.tiptap.ProseMirror {
   font-family: var(--font-content);
   font-size: 1.06rem;
   line-height: 2.05;
@@ -11,7 +12,8 @@
   color: var(--ink);
   min-height: 38vh;
   outline: none;
-  caret-color: var(--accent);
+  /* 明亮主题同样强制使用朱砂强调色，避免被浏览器默认白色插入光标覆盖。 */
+  caret-color: var(--accent) !important;
   user-select: text;
   cursor: text;
   word-break: break-word;

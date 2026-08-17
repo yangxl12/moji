@@ -3,7 +3,7 @@ import { _electron } from 'playwright-core'
 import { mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 
-const ROOT = 'D:\\yxlAgent\\moji'
+const ROOT = process.cwd()
 const TMP = join(ROOT, '.test-tmp')
 rmSync(TMP, { recursive: true, force: true })
 const userData = join(TMP, 'pkg-user-data')

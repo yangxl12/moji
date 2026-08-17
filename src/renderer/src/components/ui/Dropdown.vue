@@ -124,7 +124,8 @@ onBeforeUnmount(() => {
 }
 .dd-anchor {
   position: fixed;
-  z-index: 220;
+  /* 下拉菜单可能从多选浮层或右键菜单打开，必须位于它们之上。 */
+  z-index: 350;
   transform: translateX(-100%);
 }
 /* 向右展开：左缘贴锚点右缘，无需回移 */

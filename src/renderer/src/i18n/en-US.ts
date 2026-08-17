@@ -59,6 +59,8 @@ export default {
     deleteTitle: 'Delete notebook',
     deleteDesc: 'Notes inside “{name}” will not be deleted — they will move to “All”. This cannot be undone.',
     exportNotebook: 'Export as ZIP',
+    exportNotebookMd: 'Export MD (ZIP)',
+    exportNotebookPdf: 'Export PDF (ZIP)',
     exportSuccess: 'Exported {n} notes: {file}',
     exportEmpty: 'No notes to export',
     exportFailed: 'Export failed'
@@ -81,6 +83,14 @@ export default {
     deleteDesc: '{n} notes (including their images) will be deleted. This cannot be undone.',
     movedToast: 'Moved to “{name}”',
     deletedToast: 'Deleted {n} notes',
+    copyNotes: 'Copy',
+    copiedNotes: '{n} note(s) copied. Press Ctrl+V to paste.',
+    pastedNotes: 'Pasted {n} note(s)',
+    exportMd: 'Export as MD',
+    exportPdf: 'Export as PDF',
+    exportSuccess: 'Exported {n} note(s): {file}',
+    exportEmpty: 'No notes to export',
+    exportFailed: 'Export failed',
     edited: 'Edited {time}'
   },
   search: {
@@ -267,6 +277,9 @@ export default {
     editing: 'Editing',
     defaultFormat: 'Default note format',
     defaultFormatDesc: 'Default format used when creating new notes',
+    toggleShortcut: 'Show / hide shortcut',
+    toggleShortcutDesc: 'Press this shortcut to show or hide the InkNote window',
+    toggleShortcutPh: 'e.g. Shift+Alt+M',
     about: 'About',
     version: 'Version',
     localFirst: 'InkNote · A local-first personal note app'

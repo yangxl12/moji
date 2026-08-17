@@ -6,6 +6,8 @@ export type Language = 'zh-CN' | 'en-US'
 export type AiStrength = 'gentle' | 'standard' | 'deep'
 /** 笔记正文格式：富文本 TipTap JSON / Markdown 源码字符串 */
 export type NoteFormat = 'richtext' | 'markdown'
+/** 导出文件的正文格式 */
+export type ExportFormat = 'md' | 'pdf'
 /** Markdown 预览页面展示模式 */
 export type MdViewMode = 'preview' | 'edit' | 'split'
 
@@ -34,6 +36,8 @@ export interface Settings {
   language: Language
   /** 新建笔记时默认使用的正文格式 */
   defaultFormat: NoteFormat
+  /** 显示/隐藏主窗口的全局快捷键 */
+  toggleShortcut: string
   ai: AiConfig | null
 }
 
@@ -133,7 +137,7 @@ export interface MigrateResult {
 /** 笔记本导出为 ZIP 的结果 */
 export interface ExportResult {
   ok: boolean
-  /** 生成的 zip 文件绝对路径（保存在数据目录根） */
+  /** 生成的导出文件绝对路径（保存在数据目录根） */
   file?: string
   /** 导出的笔记篇数 */
   count?: number
@@ -170,8 +174,8 @@ export interface InkApi {
   createNotebook(name: string): Promise<Notebook>
   renameNotebook(id: string, name: string): Promise<Notebook>
   deleteNotebook(id: string): Promise<void>
-  /** 导出笔记本全部笔记（notebookId 为 null 表示「全部」）为 zip，保存到数据目录根 */
-  exportNotebook(notebookId: string | null): Promise<ExportResult>
+  /** 导出笔记本全部笔记（notebookId 为 null 表示「全部」）为 ZIP，保存到数据目录根 */
+  exportNotebook(notebookId: string | null, format: ExportFormat): Promise<ExportResult>
 
   listNotes(): Promise<NoteMeta[]>
   getNote(id: string): Promise<NoteMeta | null>
@@ -179,6 +183,12 @@ export interface InkApi {
   updateNote(id: string, patch: { title?: string; content?: unknown; notebookId?: string | null; format?: NoteFormat }): Promise<NoteMeta>
   deleteNotes(ids: string[]): Promise<void>
   moveNotes(ids: string[], notebookId: string | null): Promise<void>
+  /** 将笔记完整复制到目标笔记本，连同正文和图片一起克隆 */
+  copyNotes(ids: string[], notebookId: string | null): Promise<NoteMeta[]>
+  /** 导出单条笔记为独立 MD / PDF 文件 */
+  exportNote(id: string, format: ExportFormat): Promise<ExportResult>
+  /** 将多条笔记分别导出后压缩为一个 ZIP */
+  exportNotes(ids: string[], format: ExportFormat, archiveName: string): Promise<ExportResult>
 
     openExternal(url: string): Promise<void>
 

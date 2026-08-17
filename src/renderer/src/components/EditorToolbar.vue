@@ -183,7 +183,8 @@ const groups = computed<Btn[][]>(() => {
           class="ed-tb-btn"
           :class="{ active: b.active?.() }"
           :disabled="b.disabled?.()"
-          :data-tip="b.tip"
+          :aria-label="b.tip"
+          v-tip="b.tip"
           @mousedown.prevent
           @click="b.run()"
         >

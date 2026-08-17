@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   uiFont: '"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei UI","Segoe UI",system-ui,sans-serif',
   language: 'zh-CN',
   defaultFormat: 'richtext',
+  toggleShortcut: 'Shift+Alt+M',
   ai: null
 }
 
@@ -288,6 +289,9 @@ export async function loadSettings(): Promise<Settings> {
   if (merged.defaultFormat !== 'richtext' && merged.defaultFormat !== 'markdown') {
     merged.defaultFormat = defaults.defaultFormat
   }
+  if (typeof merged.toggleShortcut !== 'string' || !merged.toggleShortcut.trim()) {
+    merged.toggleShortcut = defaults.toggleShortcut
+  }
   merged.ai = hydrateAi(raw.ai as StoredAi | null | undefined)
   return merged
 }
@@ -469,6 +473,90 @@ export async function deleteNotes(ids: string[]): Promise<void> {
 
 export async function moveNotes(ids: string[], notebookId: string | null): Promise<void> {
   for (const id of ids) await updateNoteFile(id, { notebookId })
+}
+
+/** 将 TipTap / Markdown 正文中关联图片的 URL 改写为复制后的文件名。 */
+function cloneNoteContent(value: unknown, imageNames: Map<string, string>): unknown {
+  if (typeof value === 'string') {
+    return value.replace(/inkimg:\/\/image\/([^\s'"()<>]+)/gi, (source, rawName: string) => {
+      const copied = imageNames.get(basename(rawName))
+      return copied ? `inkimg://image/${copied}` : source
+    })
+  }
+  if (Array.isArray(value)) return value.map((item) => cloneNoteContent(item, imageNames))
+  if (value && typeof value === 'object') {
+    const result: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value)) result[key] = cloneNoteContent(item, imageNames)
+    return result
+  }
+  return value
+}
+
+function copyTitle(title: string, usedTitles: Set<string>): string {
+  const base = title.trim()
+  if (!base || !usedTitles.has(base)) {
+    usedTitles.add(base)
+    return base
+  }
+  const copiedBase = `${base}-副本`
+  let candidate = copiedBase
+  let index = 2
+  while (usedTitles.has(candidate)) candidate = `${copiedBase} ${index++}`
+  usedTitles.add(candidate)
+  return candidate
+}
+
+/**
+ * 复制笔记时新建独立的图片文件，避免删除任一副本时清理原笔记的图片。
+ * Markdown / TipTap 内容里的 inkimg 地址会同步指向新文件。
+ */
+export async function copyNotes(ids: string[], notebookId: string | null): Promise<NoteMeta[]> {
+  const root = await getRootDir()
+  if (!root) throw new Error('No storage')
+  const uniqueIds = [...new Set(ids)]
+  const sources = (await Promise.all(uniqueIds.map((id) => getNote(id)))).filter((note): note is NoteMeta => Boolean(note))
+  if (!sources.length) return []
+
+  const existing = await listNotes()
+  const usedTitles = new Set(existing.filter((note) => note.notebookId === notebookId).map((note) => note.title.trim()))
+  const created: NoteMeta[] = []
+
+  for (const source of sources) {
+    const imageNames = new Map<string, string>()
+    const copiedFiles: string[] = []
+    try {
+      for (const image of source.images ?? []) {
+        const original = basename(image)
+        const extension = /\.[0-9a-z]+$/i.exec(original)?.[0] ?? ''
+        const copied = `${randomUUID()}${extension}`
+        try {
+          await fs.copyFile(join(root, IMAGE_DIR, original), join(root, IMAGE_DIR, copied))
+          imageNames.set(original, copied)
+          copiedFiles.push(copied)
+        } catch {
+          // 原图缺失时仍保留正文；导出的副本与原笔记保持同样的可见内容。
+        }
+      }
+
+      const now = Date.now()
+      const note: NoteMeta = {
+        id: randomUUID(),
+        title: copyTitle(source.title, usedTitles),
+        notebookId,
+        format: normalizeFormat(source.format),
+        content: cloneNoteContent(source.content, imageNames),
+        createdAt: now,
+        updatedAt: now,
+        images: [...imageNames.values()]
+      }
+      await withLock(`note:${note.id}`, () => atomicWrite(notePath(root, note.id), JSON.stringify(note, null, 2)))
+      created.push(note)
+    } catch (error) {
+      await Promise.all(copiedFiles.map((file) => fs.unlink(join(root, IMAGE_DIR, file)).catch(() => undefined)))
+      throw error
+    }
+  }
+  return created
 }
 
 // ---------- 图片 ----------

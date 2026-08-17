@@ -1,10 +1,11 @@
-import { app, BrowserWindow, protocol, shell, nativeTheme } from 'electron'
+import { app, BrowserWindow, globalShortcut, protocol, shell, nativeTheme } from 'electron'
 import { join } from 'path'
 import { registerIpc } from './ipc'
-import { loadMeta, loadSettings, resolveImage, saveMeta } from './storage'
+import { DEFAULT_SETTINGS, loadMeta, loadSettings, resolveImage, saveMeta } from './storage'
 import { createTray, isQuitting, markQuitting, showTrayHintOnce } from './tray'
 
 let mainWindow: BrowserWindow | null = null
+let toggleShortcut = DEFAULT_SETTINGS.toggleShortcut
 
 const isDev = !app.isPackaged
 
@@ -22,6 +23,30 @@ function showMainWindow(): void {
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
+}
+
+function toggleMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isVisible()) {
+    mainWindow.hide()
+    sendToWindow('window:hidden')
+  } else {
+    showMainWindow()
+  }
+}
+
+/** 先注册新快捷键；失败时恢复旧值，避免用户把自己锁在隐藏窗口外。 */
+function setToggleShortcut(shortcut: string): void {
+  const next = shortcut.trim()
+  if (!next) throw new Error('Shortcut cannot be empty')
+  const previous = toggleShortcut
+  globalShortcut.unregister(previous)
+  if (globalShortcut.register(next, toggleMainWindow)) {
+    toggleShortcut = next
+    return
+  }
+  globalShortcut.register(previous, toggleMainWindow)
+  throw new Error('Shortcut is unavailable')
 }
 
 // ---------- 图片自定义协议 inkimg://image/<filename> ----------
@@ -145,7 +170,8 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     registerImageProtocol()
-    registerIpc(() => mainWindow)
+    registerIpc(() => mainWindow, setToggleShortcut)
+    setToggleShortcut(DEFAULT_SETTINGS.toggleShortcut)
     app.setAppUserModelId('com.yxl.inknote')
     // 保持主题源与设置一致
     try {
@@ -153,6 +179,7 @@ if (!gotLock) {
       if (meta.rootDir) {
         const settings = await loadSettings()
         nativeTheme.themeSource = settings.themeMode
+        setToggleShortcut(settings.toggleShortcut)
       }
     } catch {
       /* ignore */
@@ -167,6 +194,8 @@ if (!gotLock) {
   })
 
   app.on('before-quit', () => markQuitting())
+
+  app.on('will-quit', () => globalShortcut.unregisterAll())
 
   app.on('window-all-closed', () => {
     app.quit()

@@ -514,7 +514,8 @@ textarea.input {
 /* ---------- 固定定位提示（v-tip，不受 overflow 裁切） ---------- */
 .fixed-tip {
   position: fixed;
-  z-index: 400;
+  /* 纸张颗粒层位于极高层级；提示必须位于它之上，才不会显得被遮住。 */
+  z-index: 2147483001;
   background: var(--tooltip-bg);
   color: var(--tooltip-ink);
   font-size: 0.74rem;

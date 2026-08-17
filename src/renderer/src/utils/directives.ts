@@ -53,12 +53,17 @@ function showTip(el: HTMLElement, text: string, side: 'top' | 'right'): void {
   tip.textContent = text
   tip.dataset.side = side
   const r = el.getBoundingClientRect()
+  const margin = 8
   if (side === 'right') {
-    tip.style.left = `${Math.round(r.right + 10)}px`
+    const left = Math.max(margin, Math.min(r.right + 10, window.innerWidth - tip.offsetWidth - margin))
+    tip.style.left = `${Math.round(left)}px`
     tip.style.top = `${Math.round(r.top + r.height / 2)}px`
   } else {
-    tip.style.left = `${Math.round(r.left + r.width / 2)}px`
-    tip.style.top = `${Math.round(r.top - 8)}px`
+    const halfWidth = tip.offsetWidth / 2
+    const left = Math.max(halfWidth + margin, Math.min(r.left + r.width / 2, window.innerWidth - halfWidth - margin))
+    const top = Math.max(tip.offsetHeight + margin, r.top - 8)
+    tip.style.left = `${Math.round(left)}px`
+    tip.style.top = `${Math.round(top)}px`
   }
   tip.classList.add('show')
 }

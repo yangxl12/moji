@@ -3,7 +3,7 @@ import { _electron } from 'playwright-core'
 import { mkdirSync, existsSync, readFileSync, rmSync, readdirSync } from 'fs'
 import { join } from 'path'
 
-const ROOT = 'D:\\yxlAgent\\moji'
+const ROOT = process.cwd()
 const TMP = join(ROOT, '.test-tmp')
 rmSync(TMP, { recursive: true, force: true })
 const userData = join(TMP, 'user-data')
@@ -102,7 +102,7 @@ await step('新建笔记并写入内容', async () => {
 await step('工具栏加粗与字数', async () => {
   await page.click('.tiptap')
   await page.keyboard.press('Control+a')
-  await page.click('.ed-tb-btn[data-tip="加粗"]')
+  await page.click('.ed-tb-btn[aria-label="加粗"]')
   const words = await page.textContent('.ed-meta')
   if (!words.includes('字')) return fail('字数统计缺失: ' + words)
   ok('加粗生效，字数统计: ' + words.trim())
@@ -205,6 +205,38 @@ await step('全局搜索 Ctrl+K', async () => {
   ok('Enter 打开搜索结果进入笔记页')
 })
 
+await step('单条笔记右键菜单、导出与 Ctrl+C / Ctrl+V 复制', async () => {
+  const card = page.locator('.note-card').first()
+  await card.click({ button: 'right' })
+  await page.waitForSelector('.np-ctx-menu')
+  const menu = await page.textContent('.np-ctx-menu')
+  for (const label of ['复制', '移动到', '导出为 MD', '导出为 PDF']) {
+    if (!menu.includes(label)) return fail('笔记右键菜单缺少「' + label + '」')
+  }
+  await page.click('.np-ctx-menu .ctx-item:has-text("导出为 MD")')
+  await page.waitForSelector('.toast')
+  const markdowns = readdirSync(storage).filter((f) => /^测试笔记-\d{8}(?:-\d+)?\.md$/.test(f))
+  if (markdowns.length !== 1) return fail('单条 MD 导出命名异常: ' + readdirSync(storage).join(', '))
+  if (!readFileSync(join(storage, markdowns[0]), 'utf-8').startsWith('# 测试笔记')) return fail('单条 MD 导出排版缺少标题')
+  await card.click({ button: 'right' })
+  await page.waitForSelector('.np-ctx-menu')
+  await page.click('.np-ctx-menu .ctx-item:has-text("导出为 PDF")')
+  await pause(2500)
+  const pdfs = readdirSync(storage).filter((f) => /^测试笔记-\d{8}(?:-\d+)?\.pdf$/.test(f))
+  if (pdfs.length !== 1 || !readFileSync(join(storage, pdfs[0])).subarray(0, 4).equals(Buffer.from('%PDF'))) {
+    const pdfToast = await page.locator('.toast').last().textContent()
+    return fail('单条 PDF 导出异常: ' + (pdfToast ?? '') + ' · ' + readdirSync(storage).join(', '))
+  }
+  await card.click()
+  await page.keyboard.press('Control+c')
+  await page.waitForSelector('.toast')
+  await page.keyboard.press('Control+v')
+  await page.waitForFunction(() => document.querySelectorAll('.note-card').length === 2)
+  const titles = await page.locator('.note-title').allTextContents()
+  if (!titles.some((title) => title.includes('测试笔记-副本'))) return fail('同笔记本粘贴未追加「-副本」: ' + titles.join(', '))
+  ok('右键菜单完整，单条 MD 已导出，快捷键复制生成独立副本')
+})
+
 await step('批量移动笔记（下拉菜单 → 工作）', async () => {
   const card = page.locator('.note-card').first()
   await card.hover()
@@ -216,7 +248,7 @@ await step('批量移动笔记（下拉菜单 → 工作）', async () => {
   await page.click('.dd-menu .menu-item:has-text("工作")')
   await pause(600)
   const remaining = await page.locator('.note-card').count()
-  if (remaining !== 0) return fail('移动后仍显示在「生活」: ' + remaining)
+  if (remaining !== 1) return fail('移动一条后「生活」应保留一篇副本，实际 ' + remaining)
   await page.click('.sb-item:has-text("工作")')
   await page.waitForSelector('.note-card')
   ok('下拉菜单移动成功，笔记出现在「工作」')
@@ -226,7 +258,8 @@ await step('批量移动笔记到「全部」', async () => {
   const card = page.locator('.note-card').first()
   await card.hover()
   await card.locator('.note-check').click()
-  await page.click('.batch-bar .batch-btn:has-text("全部")')
+  await page.click('.batch-bar .batch-btn:has-text("移动到")')
+  await page.click('.dd-menu .menu-item:has-text("全部")')
   await pause(600)
   const remaining = await page.locator('.note-card').count()
   if (remaining !== 0) return fail('移动后仍显示在「工作」: ' + remaining)
@@ -246,13 +279,24 @@ await step('右键导出笔记本为 ZIP', async () => {
   if (!okToast.includes('已导出 1 篇笔记')) return fail('导出成功提示异常: ' + okToast)
   const zips = readdirSync(storage).filter((f) => f.endsWith('.zip'))
   if (zips.length !== 1) return fail('导出后存储根目录应有 1 个 zip，实际 ' + zips.length)
-  if (!zips[0].includes('墨记导出-全部-')) return fail('zip 命名异常: ' + zips[0])
+  if (!/^全部-\d{8}(?:-\d+)?\.zip$/.test(zips[0])) return fail('zip 命名异常: ' + zips[0])
   const zipBuf = readFileSync(join(storage, zips[0]))
   if (zipBuf.readUInt32LE(0) !== 0x04034b50) return fail('zip 本地文件头签名异常')
-  if (!zipBuf.includes(Buffer.from('全部/notes/', 'utf-8'))) return fail('zip 内缺少「全部/notes/」目录')
+  if (!zipBuf.includes(Buffer.from('全部/', 'utf-8')) || !zipBuf.includes(Buffer.from('.md', 'utf-8'))) {
+    return fail('zip 内缺少笔记本目录或独立 MD 笔记文件')
+  }
   ok('「全部」导出成功: ' + zips[0])
-  // 空笔记本（生活）导出：无笔记 → 提示且不生成新 zip
-  await page.click('.sb-item:has-text("生活")', { button: 'right' })
+  await page.click('.sb-item:has-text("全部")', { button: 'right' })
+  await page.waitForSelector('.nb-ctx-menu')
+  await page.click('.nb-ctx-menu .ctx-item:has-text("导出为 PDF")')
+  await pause(2500)
+  const pdfZips = readdirSync(storage).filter((f) => f.endsWith('.zip'))
+  if (pdfZips.length !== 2) return fail('笔记本 PDF 导出后应有两个 ZIP，实际 ' + pdfZips.length)
+  const pdfZip = pdfZips.find((name) => readFileSync(join(storage, name)).includes(Buffer.from('.pdf', 'utf-8')))
+  if (!pdfZip || !readFileSync(join(storage, pdfZip)).includes(Buffer.from('%PDF'))) return fail('ZIP 内缺少独立 PDF 笔记文件')
+  ok('「全部」PDF 按独立文件打包成功: ' + pdfZip)
+  // 空笔记本（工作）导出：无笔记 → 提示且不生成新 zip
+  await page.click('.sb-item:has-text("工作")', { button: 'right' })
   await page.waitForSelector('.nb-ctx-menu')
   await page.click('.nb-ctx-menu .ctx-item')
   await page.waitForSelector('.toast')
@@ -260,7 +304,7 @@ await step('右键导出笔记本为 ZIP', async () => {
   if (!emptyToast.includes('没有可导出的笔记')) return fail('空笔记本提示异常: ' + emptyToast)
   await pause(500)
   const zips2 = readdirSync(storage).filter((f) => f.endsWith('.zip'))
-  if (zips2.length !== 1) return fail('空笔记本不应生成新 zip，实际 ' + zips2.length)
+  if (zips2.length !== 2) return fail('空笔记本不应生成新 zip，实际 ' + zips2.length)
   ok('空笔记本导出给出提示且不生成文件')
 })
 
@@ -283,8 +327,8 @@ await step('删除笔记（确认弹窗）', async () => {
   await page.waitForSelector('.modal')
   await shot(page, '06-confirm')
   await page.click('.modal .btn-danger')
-  await page.waitForSelector('.empty')
-  ok('笔记已删除，空状态显示')
+  await page.waitForFunction(() => document.querySelectorAll('.notes-pane .note-card').length === 1)
+  ok('笔记已删除，「全部」仅保留其他笔记本中的副本')
 })
 
 await step('删除笔记本', async () => {
@@ -313,6 +357,21 @@ await step('设置：暗黑主题', async () => {
   if (theme !== 'dark') return fail('主题未切换: ' + theme)
   ok('暗黑主题生效')
   await shot(page, '07-settings-dark')
+})
+
+await step('设置：全局显示 / 隐藏快捷键', async () => {
+  const shortcut = page.locator('.st-shortcut-input')
+  await shortcut.fill('Shift+Alt+N')
+  await shortcut.press('Enter')
+  await pause(300)
+  const customRegistered = await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Shift+Alt+N'))
+  if (!customRegistered) return fail('自定义全局快捷键未注册')
+  await shortcut.fill('Shift+Alt+M')
+  await shortcut.press('Enter')
+  await pause(300)
+  const defaultRegistered = await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Shift+Alt+M'))
+  if (!defaultRegistered) return fail('默认全局快捷键恢复失败')
+  ok('设置可重新注册并保存全局显示 / 隐藏快捷键')
 })
 
 await step('设置：切换英文', async () => {

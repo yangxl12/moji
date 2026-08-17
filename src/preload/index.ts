@@ -3,6 +3,7 @@ import type {
   AiConfig,
   AiPolishInput,
   AiStreamEvent,
+  ExportFormat,
   InkApi,
   SaveImagePayload,
   Settings,
@@ -26,7 +27,7 @@ const api: InkApi = {
   createNotebook: (name) => ipcRenderer.invoke('notebooks:create', name),
   renameNotebook: (id, name) => ipcRenderer.invoke('notebooks:rename', id, name),
   deleteNotebook: (id) => ipcRenderer.invoke('notebooks:delete', id),
-  exportNotebook: (notebookId) => ipcRenderer.invoke('notebooks:export', notebookId),
+  exportNotebook: (notebookId, format: ExportFormat) => ipcRenderer.invoke('notebooks:export', notebookId, format),
     /* openExternal 由主进程注册，这里只保留说明
   // ipcMain.handle('app:openExternal', async (_e, url: string) => {
     // if (!/^(https?:|mailto:)/i.test(url || '')) return
@@ -40,6 +41,9 @@ const api: InkApi = {
   updateNote: (id, patch) => ipcRenderer.invoke('notes:update', id, patch),
   deleteNotes: (ids) => ipcRenderer.invoke('notes:delete', ids),
   moveNotes: (ids, notebookId) => ipcRenderer.invoke('notes:move', ids, notebookId),
+  copyNotes: (ids, notebookId) => ipcRenderer.invoke('notes:copy', ids, notebookId),
+  exportNote: (id, format: ExportFormat) => ipcRenderer.invoke('notes:export', id, format),
+  exportNotes: (ids, format: ExportFormat, archiveName: string) => ipcRenderer.invoke('notes:exportMany', ids, format, archiveName),
 
   saveImage: (payload: SaveImagePayload) => ipcRenderer.invoke('images:save', payload),
 

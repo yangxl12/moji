@@ -15,7 +15,7 @@ const props = defineProps<{
   active?: boolean
 }>()
 
-const emit = defineEmits<{ open: []; toggle: [] }>()
+const emit = defineEmits<{ open: []; toggle: []; context: [event: MouseEvent] }>()
 
 const { t } = useI18n()
 
@@ -38,6 +38,7 @@ function titleTip(el: HTMLElement): string | null {
     :class="{ selected, active, 'select-mode': selectMode }"
     :style="{ animationDelay: `${Math.min(index, 12) * 0.02}s` }"
     @click="emit('open')"
+    @contextmenu.prevent="emit('context', $event)"
   >
     <span class="note-title clamp-1" v-tip="titleTip">{{ title }}</span>
     <button class="note-check" :class="{ checked: selected }" @click.stop="emit('toggle')">

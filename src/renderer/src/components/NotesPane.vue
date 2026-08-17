@@ -7,6 +7,7 @@ import NoteCard from '@/components/NoteCard.vue'
 import { useNotesStore } from '@/stores/notes'
 import { useNotebooksStore } from '@/stores/notebooks'
 import { useUiStore } from '@/stores/ui'
+import type { ExportFormat } from '@shared/types'
 
 const { t } = useI18n()
 const notes = useNotesStore()
@@ -20,6 +21,10 @@ const rootEl = ref<HTMLElement | null>(null)
 const batchEl = ref<HTMLElement | null>(null)
 /** 多选浮层的固定定位坐标（锚定在最顶部选中条目的右侧） */
 const batchPos = ref({ left: '0px', top: '0px' })
+/** 应用内笔记剪贴板：仅保存 ID，正文和图片在粘贴时由主进程完整克隆。 */
+const copiedIds = ref<string[]>([])
+const ctx = ref<{ x: number; y: number; noteId: string } | null>(null)
+const ctxEl = ref<HTMLElement | null>(null)
 
 const visibleNotes = computed(() => {
   const active = notebooks.activeId
@@ -38,6 +43,10 @@ const activeTitle = computed(() => {
 })
 
 const allSelected = computed(() => visibleNotes.value.length > 0 && selected.value.size === visibleNotes.value.length)
+const moveEntries = computed(() => [
+  { key: '__all__', label: t('common.all'), icon: 'note' },
+  ...notebooks.list.map((notebook) => ({ key: notebook.id, label: notebook.name, icon: 'book' }))
+])
 
 /** 折叠后轨道上的"书脊"字符 */
 function spineChar(title: string): string {
@@ -68,6 +77,20 @@ function toggleSelectAll(): void {
 function exitSelect(): void {
   selectMode.value = false
   selected.value = new Set()
+}
+
+function rememberCopies(ids: string[]): void {
+  copiedIds.value = [...new Set(ids)]
+  if (copiedIds.value.length) ui.toast('success', t('home.copiedNotes', { n: copiedIds.value.length }))
+}
+
+async function pasteCopiedNotes(): Promise<void> {
+  if (!copiedIds.value.length) return
+  const notebookId = notebooks.activeId === 'all' ? null : notebooks.activeId
+  const copied = await notes.copy([...copiedIds.value], notebookId)
+  if (!copied.length) return
+  ui.selectNote(copied[0].id)
+  ui.toast('success', t('home.pastedNotes', { n: copied.length }))
 }
 
 // ---------- 多选浮层定位 ----------
@@ -145,8 +168,33 @@ async function moveSelected(target: string | null): Promise<void> {
   exitSelect()
 }
 
+function exportToast(result: { ok: boolean; file?: string; error?: string }, count: number): void {
+  if (result.ok && result.file) {
+    const file = result.file.split(/[\\/]/).pop() ?? result.file
+    ui.toast('success', t('home.exportSuccess', { n: count, file }))
+  } else if (result.error === 'Empty') {
+    ui.toast('info', t('home.exportEmpty'))
+  } else {
+    ui.toast('error', t('home.exportFailed'))
+  }
+}
+
+async function exportSelected(format: ExportFormat): Promise<void> {
+  const ids = [...selected.value]
+  const result = await window.api.exportNotes(ids, format, activeTitle.value)
+  exitSelect()
+  exportToast(result, ids.length)
+}
+
+function copySelected(): void {
+  rememberCopies([...selected.value])
+  exitSelect()
+}
+
 function openNote(id: string): void {
   ui.selectNote(id)
+  // 卡片是非焦点元素；将焦点交回笔记列表后，紧接着的 Ctrl+C 才能明确表示“复制此笔记”。
+  rootEl.value?.focus({ preventScroll: true })
 }
 
 async function newNote(): Promise<void> {
@@ -168,10 +216,66 @@ function onDocMousedown(e: MouseEvent): void {
   if (!selectMode.value) return
   const target = e.target as Node | null
   if (!target) return
-  if (batchEl.value?.contains(target)) return
+  // mousedown 先于卡片的 click；未选卡片不能在切换自身前退出多选模式。
   if (rootEl.value?.contains(target)) return
+  if (batchEl.value?.contains(target)) return
   if (target instanceof Element && target.closest('.dd-anchor')) return
   exitSelect()
+}
+
+function closeCtx(): void {
+  ctx.value = null
+}
+
+async function openNoteCtx(e: MouseEvent, noteId: string): Promise<void> {
+  if (selectMode.value) exitSelect()
+  ui.selectNote(noteId)
+  ctx.value = { x: e.clientX, y: e.clientY, noteId }
+  await nextTick()
+  const menu = ctxEl.value
+  if (!menu || !ctx.value) return
+  const rect = menu.getBoundingClientRect()
+  const margin = 8
+  ctx.value = {
+    x: Math.max(margin, Math.min(e.clientX, window.innerWidth - rect.width - margin)),
+    y: Math.max(margin, Math.min(e.clientY, window.innerHeight - rect.height - margin)),
+    noteId
+  }
+}
+
+function copyContextNote(): void {
+  if (!ctx.value) return
+  rememberCopies([ctx.value.noteId])
+  closeCtx()
+}
+
+async function moveContextNote(key: string): Promise<void> {
+  const noteId = ctx.value?.noteId
+  closeCtx()
+  if (!noteId) return
+  const target = key === '__all__' ? null : key
+  await notes.move([noteId], target)
+  const name = target ? notebooks.list.find((notebook) => notebook.id === target)?.name : t('common.all')
+  ui.toast('success', t('home.movedToast', { name: name ?? t('common.all') }))
+}
+
+async function exportContextNote(format: ExportFormat): Promise<void> {
+  const noteId = ctx.value?.noteId
+  closeCtx()
+  if (!noteId) return
+  exportToast(await window.api.exportNote(noteId, format), 1)
+}
+
+function onCtxOutside(e: MouseEvent): void {
+  const target = e.target as Node | null
+  if (!target) return
+  if (ctxEl.value?.contains(target)) return
+  if (target instanceof Element && target.closest('.dd-anchor')) return
+  closeCtx()
+}
+
+function onCtxScroll(): void {
+  closeCtx()
 }
 
 // ---------- 选中态与列表联动 ----------
@@ -209,7 +313,26 @@ watch(
 // ↑ ↓ 切换笔记；Enter 聚焦正文（编辑即预览，无需再"进入编辑"）；Esc 退出多选
 function onKeydown(e: KeyboardEvent): void {
   if (e.key === 'Escape') {
-    if (selectMode.value) exitSelect()
+    if (ctx.value) closeCtx()
+    else if (selectMode.value) exitSelect()
+    return
+  }
+  const editable = document.activeElement
+  const editableTag = editable?.tagName
+  const inEditable =
+    editable &&
+    (editableTag === 'INPUT' || editableTag === 'TEXTAREA' || editableTag === 'SELECT' || (editable as HTMLElement).isContentEditable)
+  const withPrimaryModifier = (e.ctrlKey || e.metaKey) && !e.altKey
+  if (withPrimaryModifier && !inEditable && e.key.toLowerCase() === 'c') {
+    const ids = selectMode.value ? [...selected.value] : ui.selectedNoteId ? [ui.selectedNoteId] : []
+    if (!ids.length) return
+    e.preventDefault()
+    rememberCopies(ids)
+    return
+  }
+  if (withPrimaryModifier && !inEditable && e.key.toLowerCase() === 'v' && copiedIds.value.length) {
+    e.preventDefault()
+    void pasteCopiedNotes()
     return
   }
   const isNavKey = e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter'
@@ -246,16 +369,20 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('resize', updateBatchPos)
   document.addEventListener('mousedown', onDocMousedown)
+  document.addEventListener('mousedown', onCtxOutside)
+  document.addEventListener('scroll', onCtxScroll, true)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('resize', updateBatchPos)
   document.removeEventListener('mousedown', onDocMousedown)
+  document.removeEventListener('mousedown', onCtxOutside)
+  document.removeEventListener('scroll', onCtxScroll, true)
 })
 </script>
 
 <template>
-  <aside ref="rootEl" class="notes-pane" :class="{ collapsed: ui.notesCollapsed }">
+  <aside ref="rootEl" class="notes-pane" :class="{ collapsed: ui.notesCollapsed }" tabindex="-1">
     <!-- ---------- 顶部行：当前笔记本标题 + 新建笔记 ---------- -->
     <header v-if="!ui.notesCollapsed" class="np-head">
       <h2 class="np-head-title clamp-1">
@@ -290,6 +417,7 @@ onBeforeUnmount(() => {
             :active="ui.selectedNoteId === note.id"
             @open="selectMode ? toggleNote(note.id) : openNote(note.id)"
             @toggle="toggleNote(note.id)"
+            @context="openNoteCtx($event, note.id)"
           />
         </div>
 
@@ -342,14 +470,14 @@ onBeforeUnmount(() => {
           <Icon :name="allSelected ? 'minus' : 'check'" :size="15" />
           {{ allSelected ? t('home.deselectAll') : t('home.selectAll') }}
         </button>
-        <button class="batch-btn" @click="moveSelected(null)">
-          <Icon name="note" :size="15" />
-          {{ t('common.all') }}
+        <button class="batch-btn" @click="copySelected">
+          <Icon name="copy" :size="15" />
+          {{ t('home.copyNotes') }}
         </button>
         <Dropdown
           direction="down"
-          :entries="notebooks.list.map((n) => ({ key: n.id, label: n.name, icon: 'book' }))"
-          @select="moveSelected($event)"
+          :entries="moveEntries"
+          @select="moveSelected($event === '__all__' ? null : $event)"
         >
           <template #default="{ toggle }">
             <button class="batch-btn" @click="toggle">
@@ -360,15 +488,51 @@ onBeforeUnmount(() => {
           </template>
         </Dropdown>
         <span class="batch-sep" />
+        <button class="batch-btn" @click="exportSelected('md')">
+          <Icon name="download" :size="15" />
+          {{ t('home.exportMd') }}
+        </button>
+        <button class="batch-btn" @click="exportSelected('pdf')">
+          <Icon name="download" :size="15" />
+          {{ t('home.exportPdf') }}
+        </button>
+        <span class="batch-sep" />
         <button class="batch-btn batch-danger" @click="deleteSelected">
           <Icon name="trash" :size="15" />
           {{ t('common.delete') }}
         </button>
-        <button class="batch-btn batch-exit" @click="exitSelect">
-          {{ t('home.exitSelect') }}
-        </button>
       </div>
     </Transition>
+
+    <!-- ---------- 单条笔记右键菜单 ---------- -->
+    <Teleport to="body">
+      <Transition name="ctx-pop">
+        <div v-if="ctx" ref="ctxEl" class="ctx-menu np-ctx-menu" :style="{ left: `${ctx.x}px`, top: `${ctx.y}px` }">
+          <button class="ctx-item" @click="copyContextNote">
+            <Icon name="copy" :size="15" />
+            <span>{{ t('home.copyNotes') }}</span>
+          </button>
+          <Dropdown direction="down" align="left" :entries="moveEntries" @select="moveContextNote">
+            <template #default="{ toggle }">
+              <button class="ctx-item" @click="toggle">
+                <Icon name="move" :size="15" />
+                <span>{{ t('home.moveTo') }}</span>
+                <Icon name="chevron-right" :size="14" class="np-ctx-arrow" />
+              </button>
+            </template>
+          </Dropdown>
+          <span class="np-ctx-sep" />
+          <button class="ctx-item" @click="exportContextNote('md')">
+            <Icon name="download" :size="15" />
+            <span>{{ t('home.exportMd') }}</span>
+          </button>
+          <button class="ctx-item" @click="exportContextNote('pdf')">
+            <Icon name="download" :size="15" />
+            <span>{{ t('home.exportPdf') }}</span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
   </aside>
 </template>
 
@@ -569,7 +733,7 @@ onBeforeUnmount(() => {
 /* ---------- 多选浮层：纵向操作菜单，锚定在最顶部选中条目的右侧 ---------- */
 .batch-bar {
   position: fixed;
-  z-index: 60;
+  z-index: 330;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -581,6 +745,21 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line-strong);
   box-shadow: var(--shadow-3);
   transform-origin: left center;
+}
+.np-ctx-menu {
+  min-width: 164px;
+}
+.np-ctx-menu :deep(.dd-root) {
+  display: block;
+}
+.np-ctx-arrow {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.np-ctx-sep {
+  height: 1px;
+  margin: 0.2rem 0.35rem;
+  background: var(--line);
 }
 /* 指向锚点卡片的小箭头（双层三角模拟描边） */
 .batch-bar::before {
